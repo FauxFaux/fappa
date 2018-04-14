@@ -1,0 +1,66 @@
+FROM {{from}}
+
+RUN \
+    echo 'Acquire::http { Proxy "http://urika:3142"; };' > /etc/apt/apt.conf.d/69docker && \
+    apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get upgrade -y && \
+    apt-get clean
+
+RUN \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        apt-utils \
+        procps \
+        {{locales}} \
+        && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        bzr \
+        git \
+        mercurial \
+        subversion \
+        openssh-client \
+        ca-certificates \
+        curl \
+        wget \
+        gnupg2 \
+        dirmngr && \
+    apt-get clean
+
+RUN \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        autoconf \
+		automake \
+		bzip2 \
+		file \
+		g++ \
+		gcc \
+		imagemagick \
+		libbz2-dev \
+		libc6-dev \
+		libcurl4-openssl-dev \
+		libdb-dev \
+		libevent-dev \
+		libffi-dev \
+		libgdbm-dev \
+		libgeoip-dev \
+		libglib2.0-dev \
+		libjpeg-dev \
+		libkrb5-dev \
+		liblzma-dev \
+		libmagickcore-dev \
+		libmagickwand-dev \
+		libncurses-dev \
+		libpng-dev \
+		libpq-dev \
+		libreadline-dev \
+		libsqlite3-dev \
+		libssl-dev \
+		libtool \
+		libwebp-dev \
+		libxml2-dev \
+		libxslt-dev \
+		libyaml-dev \
+		make \
+		patch \
+		xz-utils \
+		zlib1g-dev && \
+    apt-get clean

@@ -1,11 +1,15 @@
+extern crate handlebars;
+
 #[macro_use]
 extern crate error_chain;
+
+#[macro_use]
+extern crate serde_json;
 extern crate tempdir;
 
 mod errors;
 
 use std::fs;
-use std::io::Write;
 use std::process;
 
 use errors::*;
@@ -62,107 +66,27 @@ impl Release {
 
 fn build_template(release: Release) -> Result<()> {
     let dir = tempdir::TempDir::new("fappa")?;
+    let from = format!("{}:{}", release.distro(), release.codename());
+
+    assert!(
+        process::Command::new("docker")
+            .args(&["pull", &from])
+            .spawn()?
+            .wait()?
+            .success()
+    );
+
     {
         let mut dockerfile = dir.path().to_path_buf();
         dockerfile.push("Dockerfile");
         let mut dockerfile = fs::File::create(dockerfile)?;
 
-        let from = format!("{}:{}", release.distro(), release.codename());
 
-        assert!(
-            process::Command::new("docker")
-                .args(&["pull", &from])
-                .spawn()?
-                .wait()?
-                .success()
-        );
-
-        writeln!(dockerfile, "FROM {}", from)?;
-
-        writeln!(
-            dockerfile,
-            "{}",
-            r#"
-RUN \
-    echo 'Acquire::http { Proxy "http://urika:3142"; };' > /etc/apt/apt.conf.d/69docker && \
-    apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get upgrade -y && \
-    apt-get clean
-
-RUN \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y \
-        apt-utils \
-        procps \"#
-        )?;
-
-        write!(
-            dockerfile,
-            "{}",
-            if release.locales_all() {
-                r"locales-all \"
-            } else {
-                r"locales \"
-            }
-        )?;
-
-        writeln!(
-            dockerfile,
-            "{}",
-            r#"
-        && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y \
-        bzr \
-        git \
-        mercurial \
-        subversion \
-        openssh-client \
-        ca-certificates \
-        curl \
-        wget \
-        gnupg2 \
-        dirmngr && \
-    apt-get clean
-
-RUN \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y \
-        autoconf \
-		automake \
-		bzip2 \
-		file \
-		g++ \
-		gcc \
-		imagemagick \
-		libbz2-dev \
-		libc6-dev \
-		libcurl4-openssl-dev \
-		libdb-dev \
-		libevent-dev \
-		libffi-dev \
-		libgdbm-dev \
-		libgeoip-dev \
-		libglib2.0-dev \
-		libjpeg-dev \
-		libkrb5-dev \
-		liblzma-dev \
-		libmagickcore-dev \
-		libmagickwand-dev \
-		libncurses-dev \
-		libpng-dev \
-		libpq-dev \
-		libreadline-dev \
-		libsqlite3-dev \
-		libssl-dev \
-		libtool \
-		libwebp-dev \
-		libxml2-dev \
-		libxslt-dev \
-		libyaml-dev \
-		make \
-		patch \
-		xz-utils \
-		zlib1g-dev && \
-    apt-get clean"#
-        )?;
+        let reg = handlebars::Handlebars::new();
+        reg.render_template_to_write(include_str!("build.Dockerfile.hbs"), &json!({
+            "from": from,
+            "locales": if release.locales_all() { "locales-all" } else { "locales" },
+        }), &mut dockerfile)?;
     }
 
     assert!(
