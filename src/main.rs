@@ -1,18 +1,16 @@
 extern crate handlebars;
 
 #[macro_use]
-extern crate error_chain;
+extern crate failure;
 
 #[macro_use]
 extern crate serde_json;
 extern crate tempdir;
 
-mod errors;
-
 use std::fs;
 use std::process;
 
-use errors::*;
+use failure::Error;
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 enum Release {
@@ -64,7 +62,7 @@ impl Release {
     }
 }
 
-fn build_template(release: Release) -> Result<()> {
+fn build_template(release: Release) -> Result<(), Error> {
     let dir = tempdir::TempDir::new("fappa")?;
     let from = format!("{}:{}", release.distro(), release.codename());
 
@@ -104,7 +102,7 @@ fn build_template(release: Release) -> Result<()> {
     Ok(())
 }
 
-fn build_templates() -> Result<()> {
+fn build_templates() -> Result<(), Error> {
     build_template(Release::UbuntuTrusty)?;
     build_template(Release::UbuntuXenial)?;
     build_template(Release::UbuntuArtful)?;
@@ -115,9 +113,7 @@ fn build_templates() -> Result<()> {
     Ok(())
 }
 
-fn run() -> Result<()> {
+fn main() -> Result<(), Error> {
     build_templates()?;
     Ok(())
 }
-
-quick_main!(run);
