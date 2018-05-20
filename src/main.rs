@@ -24,6 +24,7 @@ enum Release {
     UbuntuXenial,
     UbuntuArtful,
     UbuntuBionic,
+    UbuntuCosmic,
 }
 
 impl Release {
@@ -31,7 +32,7 @@ impl Release {
         use Release::*;
         match self {
             | DebianJessie | DebianStretch | DebianBuster => "debian",
-            | UbuntuTrusty | UbuntuXenial | UbuntuArtful | UbuntuBionic => "ubuntu",
+            | UbuntuTrusty | UbuntuXenial | UbuntuArtful | UbuntuBionic | UbuntuCosmic => "ubuntu",
         }
     }
 
@@ -45,6 +46,7 @@ impl Release {
             | UbuntuXenial => "xenial",
             | UbuntuArtful => "artful",
             | UbuntuBionic => "bionic",
+            | UbuntuCosmic => "cosmic",
         }
     }
 
@@ -61,6 +63,7 @@ impl Release {
             | UbuntuXenial => true,
             | UbuntuArtful => true,
             | UbuntuBionic => true,
+            | UbuntuCosmic => true,
         }
     }
 }
@@ -85,9 +88,18 @@ fn build_template(docker: &Docker, release: Release) -> Result<(), Error> {
         )?;
 
         for (file, content) in &[
-            ("drop-privs-harder.c", &include_bytes!("../security-tools/drop-privs-harder.c")[..]),
-            ("drop-all-caps.c", &include_bytes!("../security-tools/drop-all-caps.c")[..]),
-            ("all-caps.h", &include_bytes!("../security-tools/all-caps.h")[..]),
+            (
+                "drop-privs-harder.c",
+                &include_bytes!("../security-tools/drop-privs-harder.c")[..],
+            ),
+            (
+                "drop-all-caps.c",
+                &include_bytes!("../security-tools/drop-all-caps.c")[..],
+            ),
+            (
+                "all-caps.h",
+                &include_bytes!("../security-tools/all-caps.h")[..],
+            ),
         ] {
             let mut new_file = dir.path().to_path_buf();
             new_file.push(file);
@@ -125,12 +137,16 @@ fn build_templates() -> Result<(), Error> {
     let docker = shiplift::Docker::new();
 
     for release in &[
-        Release::UbuntuTrusty,
-        Release::UbuntuXenial,
-        Release::UbuntuArtful,
+        // best
         Release::UbuntuBionic,
-        Release::DebianJessie,
         Release::DebianStretch,
+        // older but supported
+        Release::UbuntuXenial,
+        Release::UbuntuTrusty,
+        Release::UbuntuArtful,
+        Release::DebianJessie,
+        // pre-release
+        Release::UbuntuCosmic,
         Release::DebianBuster,
     ] {
         build_template(&docker, *release)?;
