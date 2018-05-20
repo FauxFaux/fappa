@@ -71,3 +71,8 @@ RUN \
         python3-minimal \
         ruby \
     && apt-get clean
+
+RUN \
+    useradd -ms /bin/bash build && \
+    mkdir /build && \
+    chown build:build /build
