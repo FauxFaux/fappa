@@ -8,3 +8,7 @@ failure = "0.1"
 handlebars = "1.0.0-beta.1"
 serde_json = "1.0"
 tempdir = "0.3"
+
+[dependencies.shiplift]
+git = "https://github.com/FauxFaux/shiplift"
+rev = "3c26cb98bea16fd94b5ea1fdaf6b08030b755daf"

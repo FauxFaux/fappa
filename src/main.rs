@@ -1,16 +1,18 @@
-extern crate handlebars;
-
 #[macro_use]
 extern crate failure;
 
+extern crate handlebars;
+
 #[macro_use]
 extern crate serde_json;
+extern crate shiplift;
 extern crate tempdir;
 
 use std::fs;
-use std::process;
 
 use failure::Error;
+use shiplift::BuildOptions;
+use shiplift::Docker;
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 enum Release {
@@ -62,54 +64,67 @@ impl Release {
     }
 }
 
-fn build_template(release: Release) -> Result<(), Error> {
+fn build_template(docker: &Docker, release: Release) -> Result<(), Error> {
     let dir = tempdir::TempDir::new("fappa")?;
     let from = format!("{}:{}", release.distro(), release.codename());
-
-    assert!(
-        process::Command::new("docker")
-            .args(&["pull", &from])
-            .spawn()?
-            .wait()?
-            .success()
-    );
 
     {
         let mut dockerfile = dir.path().to_path_buf();
         dockerfile.push("Dockerfile");
         let mut dockerfile = fs::File::create(dockerfile)?;
 
-
         let reg = handlebars::Handlebars::new();
-        reg.render_template_to_write(include_str!("build.Dockerfile.hbs"), &json!({
+        reg.render_template_to_write(
+            include_str!("build.Dockerfile.hbs"),
+            &json!({
             "from": from,
             "locales": if release.locales_all() { "locales-all" } else { "locales" },
-        }), &mut dockerfile)?;
+        }),
+            &mut dockerfile,
+        )?;
     }
 
-    assert!(
-        process::Command::new("docker")
-            .arg("build")
-            .arg(format!("--tag=fappa-{}", release.codename()))
-            .arg("--network=mope")
-            .arg(".")
-            .current_dir(&dir)
-            .spawn()?
-            .wait()?
-            .success()
-    );
+    let dir_as_str = dir
+        .path()
+        .as_os_str()
+        .to_str()
+        .ok_or(format_err!("unrepresentable path and dumb library"))?;
+
+    for line in docker.images().build(&BuildOptions::builder(dir_as_str)
+        .tag(format!("fappa-{}", release.codename()))
+        .network_mode("mope")
+        .build())?
+    {
+        let line = line
+            .as_object()
+            .ok_or_else(|| format_err!("unexpected line: {:?}", line))?;
+        if let Some(msg) = line.get("stream").and_then(|stream| stream.as_string()) {
+            print!("log: {}", msg); // has newline already
+        } else if let Some(aux) = line.get("aux").and_then(|aux| aux.as_object()) {
+            println!("aux: {:?}", aux)
+        } else {
+            bail!("unknown notification: {:?}", line);
+        }
+    }
 
     Ok(())
 }
 
 fn build_templates() -> Result<(), Error> {
-    build_template(Release::UbuntuTrusty)?;
-    build_template(Release::UbuntuXenial)?;
-    build_template(Release::UbuntuArtful)?;
-    build_template(Release::UbuntuBionic)?;
-    build_template(Release::DebianJessie)?;
-    build_template(Release::DebianStretch)?;
-    build_template(Release::DebianBuster)?;
+    let docker = shiplift::Docker::new();
+
+    for release in &[
+        Release::UbuntuTrusty,
+        Release::UbuntuXenial,
+        Release::UbuntuArtful,
+        Release::UbuntuBionic,
+        Release::DebianJessie,
+        Release::DebianStretch,
+        Release::DebianBuster,
+    ] {
+        build_template(&docker, *release)?;
+    }
+
     Ok(())
 }
 
