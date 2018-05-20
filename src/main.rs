@@ -9,6 +9,7 @@ extern crate shiplift;
 extern crate tempdir;
 
 use std::fs;
+use std::io::Write;
 
 use failure::Error;
 use shiplift::BuildOptions;
@@ -82,6 +83,16 @@ fn build_template(docker: &Docker, release: Release) -> Result<(), Error> {
         }),
             &mut dockerfile,
         )?;
+
+        for (file, content) in &[
+            ("drop-privs-harder.c", &include_bytes!("../security-tools/drop-privs-harder.c")[..]),
+            ("drop-all-caps.c", &include_bytes!("../security-tools/drop-all-caps.c")[..]),
+            ("all-caps.h", &include_bytes!("../security-tools/all-caps.h")[..]),
+        ] {
+            let mut new_file = dir.path().to_path_buf();
+            new_file.push(file);
+            fs::File::create(new_file)?.write_all(content)?;
+        }
     }
 
     let dir_as_str = dir
