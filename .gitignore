@@ -2,3 +2,4 @@
 **/*.rs.bk
 .idea/
 *.iml
+ubuntu-cosmic-core-cloudimg-amd64-root.tar.gz
