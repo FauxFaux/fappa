@@ -122,7 +122,10 @@ fn build_template(docker: &Docker, release: Release) -> Result<(), Error> {
             .as_object()
             .ok_or_else(|| format_err!("unexpected line: {:?}", line))?;
         if let Some(msg) = line.get("stream").and_then(|stream| stream.as_string()) {
-            print!("log: {}", msg); // has newline already
+            print!("log: {}", msg);
+            if !msg.ends_with('\n') {
+                println!();
+            }
         } else if let Some(aux) = line.get("aux").and_then(|aux| aux.as_object()) {
             println!("aux: {:?}", aux)
         } else {
