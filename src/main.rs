@@ -122,12 +122,15 @@ fn build_template(docker: &Docker, release: Release) -> Result<(), Error> {
             .as_object()
             .ok_or_else(|| format_err!("unexpected line: {:?}", line))?;
         if let Some(msg) = line.get("stream").and_then(|stream| stream.as_string()) {
-            print!("log: {}", msg);
-            if !msg.ends_with('\n') {
-                println!();
+            for line in msg.trim_right_matches('\n').split('\n') {
+                println!(
+                    "[{}] log: {}",
+                    release.codename(),
+                    line.replace(|c| u32::from(c) < 32, " ")
+                );
             }
         } else if let Some(aux) = line.get("aux").and_then(|aux| aux.as_object()) {
-            println!("aux: {:?}", aux)
+            println!("[{}] aux: {:?}", release.codename(), aux)
         } else {
             bail!("unknown notification: {:?}", line);
         }
