@@ -2,6 +2,7 @@ extern crate clap;
 
 #[macro_use]
 extern crate failure;
+extern crate git2;
 extern crate handlebars;
 
 #[macro_use]
@@ -12,8 +13,10 @@ extern crate serde_json;
 extern crate shiplift;
 extern crate tempdir;
 extern crate toml;
+extern crate url;
 extern crate walkdir;
 
+mod git;
 mod specs;
 
 use std::fs;
@@ -193,7 +196,9 @@ fn main() -> Result<(), Error> {
             }
         }
         ("validate", _) => {
-            println!("{:?}", specs::load_from("specs")?);
+            for package in specs::load_from("specs")? {
+                git::check_cloned(package.source)?;
+            }
         }
         _ => unreachable!(),
     }

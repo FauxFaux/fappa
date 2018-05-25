@@ -13,8 +13,8 @@ struct Spec {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 pub struct Package {
-    name: String,
-    source: String,
+    pub name: String,
+    pub source: String,
 }
 
 pub fn load_from<P: AsRef<Path>>(dir: P) -> Result<Vec<Package>, Error> {
