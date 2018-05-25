@@ -197,7 +197,11 @@ fn main() -> Result<(), Error> {
         }
         ("validate", _) => {
             for package in specs::load_from("specs")? {
-                git::check_cloned(package.source)?;
+                for command in package.source {
+                    match command {
+                        specs::Command::Clone { repo, .. } => git::check_cloned(repo)?,
+                    };
+                }
             }
         }
         _ => unreachable!(),

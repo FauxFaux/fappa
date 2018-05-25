@@ -1,3 +1,16 @@
 [[package]]
 name = "libsigrok"
-source = "git://sigrok.org/libsigrok?rev=090f1e1e5478ea15baa3731fefbd4aff9be78c77"
+
+build_dep = []
+dep = []
+
+source = [
+  "CLONE git://sigrok.org/libsigrok?rev=090f1e1e5478ea15baa3731fefbd4aff9be78c77 libsigrok",
+]
+build = [
+#  "WORKDIR libsigrok",
+#  "AUTORECONF",
+]
+install = [
+#  "RUN make install",
+]

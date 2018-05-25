@@ -49,19 +49,22 @@ pub fn check_cloned<S: AsRef<str>>(url: S) -> Result<LocalRepo, Error> {
 
     let (repo, path) = check_single(url, specifier)?;
 
-    for submodule in repo.submodules()? {
-        // TODO: not clear this index_id actually returns anything useful
-        if let Some(oid) = submodule.index_id() {
-            check_single(
-                submodule
-                    .url()
-                    .ok_or(format_err!(
-                        "invalid submodule utf-8: {:?}",
-                        String::from_utf8_lossy(submodule.url_bytes())
-                    ))?
-                    .parse()?,
-                GitSpecifier::Hash(oid),
-            )?;
+    // fails 'cos we don't have a working tree, right
+    if false {
+        for submodule in repo.submodules()? {
+            // TODO: not clear this index_id actually returns anything useful
+            if let Some(oid) = submodule.index_id() {
+                check_single(
+                    submodule
+                        .url()
+                        .ok_or(format_err!(
+                            "invalid submodule utf-8: {:?}",
+                            String::from_utf8_lossy(submodule.url_bytes())
+                        ))?
+                        .parse()?,
+                    GitSpecifier::Hash(oid),
+                )?;
+            }
         }
     }
 
