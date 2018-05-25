@@ -47,6 +47,28 @@ pub fn check_cloned<S: AsRef<str>>(url: S) -> Result<LocalRepo, Error> {
 
     url.set_query(None);
 
+    let (repo, path) = check_single(url, specifier)?;
+
+    for submodule in repo.submodules()? {
+        // TODO: not clear this index_id actually returns anything useful
+        if let Some(oid) = submodule.index_id() {
+            check_single(
+                submodule
+                    .url()
+                    .ok_or(format_err!(
+                        "invalid submodule utf-8: {:?}",
+                        String::from_utf8_lossy(submodule.url_bytes())
+                    ))?
+                    .parse()?,
+                GitSpecifier::Hash(oid),
+            )?;
+        }
+    }
+
+    Ok(LocalRepo { path, specifier })
+}
+
+fn check_single(url: Url, specifier: GitSpecifier) -> Result<(git2::Repository, PathBuf), Error> {
     let mut path = PathBuf::from(".cache");
     path.push(fs_safe_url(&url));
 
@@ -69,7 +91,7 @@ pub fn check_cloned<S: AsRef<str>>(url: S) -> Result<LocalRepo, Error> {
         );
     }
 
-    Ok(LocalRepo { path, specifier })
+    Ok((repo, path))
 }
 
 fn fs_safe_url(url: &Url) -> String {
