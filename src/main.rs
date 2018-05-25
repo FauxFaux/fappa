@@ -1,3 +1,5 @@
+extern crate clap;
+
 #[macro_use]
 extern crate failure;
 
@@ -9,13 +11,14 @@ extern crate shiplift;
 extern crate tempdir;
 
 use std::fs;
+use std::io;
 use std::io::Write;
 
 use failure::Error;
 use shiplift::BuildOptions;
 use shiplift::Docker;
 
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum Release {
     DebianJessie,
     DebianStretch,
@@ -26,6 +29,20 @@ enum Release {
     UbuntuBionic,
     UbuntuCosmic,
 }
+
+const RELEASES: [Release; 8] = [
+    // best
+    Release::UbuntuBionic,
+    Release::DebianStretch,
+    // older but supported
+    Release::UbuntuXenial,
+    Release::UbuntuTrusty,
+    Release::UbuntuArtful,
+    Release::DebianJessie,
+    // pre-release
+    Release::UbuntuCosmic,
+    Release::DebianBuster,
+];
 
 impl Release {
     fn distro(&self) -> &'static str {
@@ -139,29 +156,37 @@ fn build_template(docker: &Docker, release: Release) -> Result<(), Error> {
     Ok(())
 }
 
-fn build_templates() -> Result<(), Error> {
+fn main() -> Result<(), Error> {
+    use clap::Arg;
+    use clap::SubCommand;
+    let matches = clap::App::new("fappa")
+        .setting(clap::AppSettings::SubcommandRequiredElseHelp)
+        .subcommand(SubCommand::with_name("build-images").arg(Arg::with_name("pull").long("pull")))
+        .get_matches();
+
+    // oh no I think this panics inside. /o\
     let docker = shiplift::Docker::new();
 
-    for release in &[
-        // best
-        Release::UbuntuBionic,
-        Release::DebianStretch,
-        // older but supported
-        Release::UbuntuXenial,
-        Release::UbuntuTrusty,
-        Release::UbuntuArtful,
-        Release::DebianJessie,
-        // pre-release
-        Release::UbuntuCosmic,
-        Release::DebianBuster,
-    ] {
-        build_template(&docker, *release)?;
+    match matches.subcommand() {
+        ("build-images", Some(matches)) => {
+            if matches.is_present("pull") {
+                for release in &RELEASES {
+                    print!("Pulling {:?}..", release);
+                    io::stdout().flush()?;
+                    docker.images().pull(&shiplift::PullOptions::builder()
+                        .image(release.distro())
+                        .tag(release.codename())
+                        .build())?;
+                    println!(". done.");
+                }
+            }
+
+            for release in &RELEASES {
+                build_template(&docker, *release)?;
+            }
+        }
+        _ => unreachable!(),
     }
 
-    Ok(())
-}
-
-fn main() -> Result<(), Error> {
-    build_templates()?;
     Ok(())
 }
