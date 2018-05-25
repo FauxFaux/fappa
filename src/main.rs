@@ -2,13 +2,19 @@ extern crate clap;
 
 #[macro_use]
 extern crate failure;
-
 extern crate handlebars;
+
+#[macro_use]
+extern crate serde_derive;
 
 #[macro_use]
 extern crate serde_json;
 extern crate shiplift;
 extern crate tempdir;
+extern crate toml;
+extern crate walkdir;
+
+mod specs;
 
 use std::fs;
 use std::io;
@@ -162,6 +168,7 @@ fn main() -> Result<(), Error> {
     let matches = clap::App::new("fappa")
         .setting(clap::AppSettings::SubcommandRequiredElseHelp)
         .subcommand(SubCommand::with_name("build-images").arg(Arg::with_name("pull").long("pull")))
+        .subcommand(SubCommand::with_name("validate"))
         .get_matches();
 
     // oh no I think this panics inside. /o\
@@ -184,6 +191,9 @@ fn main() -> Result<(), Error> {
             for release in &RELEASES {
                 build_template(&docker, *release)?;
             }
+        }
+        ("validate", _) => {
+            println!("{:?}", specs::load_from("specs")?);
         }
         _ => unreachable!(),
     }
