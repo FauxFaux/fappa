@@ -29,7 +29,7 @@ pub fn check_cloned<S: AsRef<str>>(url: S) -> Result<PathBuf, Error> {
 fn fs_safe_url(url: &Url) -> String {
     assert_eq!(None, url.query());
     url.as_str()
-        .replace(|c: char| !c.is_ascii_alphabetic(), "_")
+        .replace(|c: char| !c.is_alphanumeric(), "_")
 }
 
 #[cfg(test)]
