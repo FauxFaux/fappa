@@ -34,13 +34,14 @@ pub struct Package {
 
 impl Package {
     fn from_str(p: PackageSerialisation) -> Result<Package, Error> {
+        let context = p.name.to_string();
         Ok(Package {
             name: p.name,
             build_dep: p.build_dep,
             dep: p.dep,
-            source: parse_commands(p.source)?,
-            build: parse_commands(p.build)?,
-            install: parse_commands(p.install)?,
+            source: parse_commands(p.source).with_context(|_| format!("source in {}", context))?,
+            build: parse_commands(p.build).with_context(|_| format!("build in {}", context))?,
+            install: parse_commands(p.install).with_context(|_| format!("install in {}", context))?,
         })
     }
 }
@@ -122,7 +123,8 @@ pub fn load_from<P: AsRef<Path>>(dir: P) -> Result<Vec<Package>, Error> {
             .package
             .into_iter()
             .map(Package::from_str)
-            .collect::<Result<Vec<Package>, Error>>()?)
+            .collect::<Result<Vec<Package>, Error>>()
+            .with_context(|_| format!("parsing an entry in {:?}", entry.path()))?)
     }
 
     Ok(ret)
