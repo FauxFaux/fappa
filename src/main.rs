@@ -200,6 +200,7 @@ fn main() -> Result<(), Error> {
                 for command in package.source {
                     match command {
                         specs::Command::Clone { repo, .. } => git::check_cloned(repo)?,
+                        _ => continue,
                     };
                 }
             }

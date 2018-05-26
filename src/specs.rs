@@ -51,6 +51,12 @@ fn parse_commands(v: Vec<String>) -> Result<Vec<Command>, Error> {
 
 fn parse_command<S: AsRef<str>>(cmd: S) -> Result<Command, Error> {
     let cmd = cmd.as_ref();
+
+    ensure!(
+        !cmd.contains(|c: char| c.is_control()),
+        "no control characters in the tunnel"
+    );
+
     let (op, args) = split_space(cmd);
 
     Ok(match op {
@@ -61,6 +67,12 @@ fn parse_command<S: AsRef<str>>(cmd: S) -> Result<Command, Error> {
                 dest: dest.to_string(),
             }
         }
+        "AUTORECONF" => {
+            ensure!(args.is_empty(), "autoreconf takes no arguments: {:?}", args);
+            Command::Autoreconf
+        }
+        "WORKDIR" => Command::WorkDir(args.to_string()),
+        "RUN" => Command::Run(args.to_string()),
         other => bail!("unrecognised op: {:?}", other),
     })
 }
@@ -78,6 +90,9 @@ fn split_space(s: &str) -> (&str, &str) {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Command {
     Clone { repo: Url, dest: String },
+    WorkDir(String),
+    Autoreconf,
+    Run(String),
 }
 
 pub fn load_from<P: AsRef<Path>>(dir: P) -> Result<Vec<Package>, Error> {

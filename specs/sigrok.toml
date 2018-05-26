@@ -8,8 +8,8 @@ source = [
   "CLONE git://sigrok.org/libsigrok?rev=090f1e1e5478ea15baa3731fefbd4aff9be78c77 libsigrok",
 ]
 build = [
-#  "WORKDIR libsigrok",
-#  "AUTORECONF",
+  "WORKDIR libsigrok",
+  "AUTORECONF",
 ]
 install = [
 #  "RUN make install",
