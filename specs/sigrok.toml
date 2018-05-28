@@ -12,5 +12,5 @@ build = [
   "AUTORECONF",
 ]
 install = [
-#  "RUN make install",
+  "RUN make install",
 ]

@@ -4,6 +4,7 @@ extern crate clap;
 extern crate failure;
 extern crate git2;
 extern crate handlebars;
+extern crate rustc_serialize;
 
 #[macro_use]
 extern crate serde_derive;
@@ -16,6 +17,7 @@ extern crate toml;
 extern crate url;
 extern crate walkdir;
 
+mod build;
 mod git;
 mod specs;
 
@@ -28,7 +30,7 @@ use shiplift::BuildOptions;
 use shiplift::Docker;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-enum Release {
+pub enum Release {
     DebianJessie,
     DebianStretch,
     DebianBuster,
@@ -105,7 +107,7 @@ fn build_template(docker: &Docker, release: Release) -> Result<(), Error> {
 
         let reg = handlebars::Handlebars::new();
         reg.render_template_to_write(
-            include_str!("build.Dockerfile.hbs"),
+            include_str!("prepare-image.Dockerfile.hbs"),
             &json!({
             "from": from,
             "locales": if release.locales_all() { "locales-all" } else { "locales" },
@@ -139,11 +141,22 @@ fn build_template(docker: &Docker, release: Release) -> Result<(), Error> {
         .to_str()
         .ok_or(format_err!("unrepresentable path and dumb library"))?;
 
-    for line in docker.images().build(&BuildOptions::builder(dir_as_str)
-        .tag(format!("fappa-{}", release.codename()))
-        .network_mode("mope")
-        .build())?
-    {
+    dump_lines(
+        release,
+        docker.images().build(&BuildOptions::builder(dir_as_str)
+            .tag(format!("fappa-{}", release.codename()))
+            .network_mode("mope")
+            .build())?,
+    )?;
+
+    Ok(())
+}
+
+fn dump_lines(
+    release: Release,
+    lines: Box<Iterator<Item = rustc_serialize::json::Json>>,
+) -> Result<(), Error> {
+    for line in lines {
         let line = line
             .as_object()
             .ok_or_else(|| format_err!("unexpected line: {:?}", line))?;
@@ -172,6 +185,7 @@ fn main() -> Result<(), Error> {
         .setting(clap::AppSettings::SubcommandRequiredElseHelp)
         .subcommand(SubCommand::with_name("build-images").arg(Arg::with_name("pull").long("pull")))
         .subcommand(SubCommand::with_name("validate"))
+        .subcommand(SubCommand::with_name("build"))
         .get_matches();
 
     // oh no I think this panics inside. /o\
@@ -202,6 +216,13 @@ fn main() -> Result<(), Error> {
                         specs::Command::Clone { repo, .. } => git::check_cloned(repo)?,
                         _ => continue,
                     };
+                }
+            }
+        }
+        ("build", _) => {
+            for package in specs::load_from("specs")? {
+                for release in &RELEASES {
+                    build::build(release, &package)?;
                 }
             }
         }
