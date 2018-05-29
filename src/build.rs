@@ -21,6 +21,10 @@ pub fn build(docker: &Docker, release: &Release, package: &Package) -> Result<()
         writeln!(dockerfile, "FROM fappa-{}", release.codename())?;
         writeln!(dockerfile, "WORKDIR /build")?;
 
+        if !package.build_dep.is_empty() {
+            writeln!(dockerfile, "RUN DEBIAN_FRONTEND=noninteractive apt-get install -y {}", package.build_dep.join(" "))?;
+        }
+
         for command in &package.source {
             match command {
                 Command::Clone { repo, dest } => {
@@ -46,7 +50,8 @@ pub fn build(docker: &Docker, release: &Release, package: &Package) -> Result<()
                 Command::WorkDir(dir) => writeln!(dockerfile, "WORKDIR {}", dir)?,
                 Command::Autoreconf => writeln!(
                     dockerfile,
-                    "RUN autoreconf -fvi && ./configure --prefix=/ && make -j 2"
+                    "ENV PYTHONPATH=/usr/lib/python2.7/site-packages/\n\
+                    RUN autoreconf -fvi && ./configure --prefix=/usr && make -j 2"
                 )?,
                 _ => unimplemented!("build: {:?}", command),
             }

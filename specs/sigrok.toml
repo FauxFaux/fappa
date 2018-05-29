@@ -1,7 +1,28 @@
 [[package]]
 name = "libsigrok"
 
-build_dep = []
+build_dep = [
+    "libglib2.0-dev",
+    "libzip-dev",
+
+    # optional
+    "libglibmm-2.4-dev",
+    "libftdi1-dev",
+    "libusb-1.0-0-dev",
+    "libieee1284-3-dev",
+
+    "python-dev",
+    "python-gi-dev",
+    "python-setuptools",
+    "python-numpy",
+
+    # makes autoconf pick up python
+    "autoconf-archive",
+
+    "check",
+    "doxygen",
+    "swig",
+]
 dep = []
 
 source = [
