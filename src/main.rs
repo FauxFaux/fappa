@@ -1,4 +1,5 @@
 extern crate clap;
+extern crate fs_extra;
 
 #[macro_use]
 extern crate failure;
@@ -28,6 +29,7 @@ use std::io::Write;
 use failure::Error;
 use shiplift::BuildOptions;
 use shiplift::Docker;
+use tempdir::TempDir;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Release {
@@ -135,21 +137,24 @@ fn build_template(docker: &Docker, release: Release) -> Result<(), Error> {
         }
     }
 
-    let dir_as_str = dir
-        .path()
-        .as_os_str()
-        .to_str()
-        .ok_or(format_err!("unrepresentable path and dumb library"))?;
-
     dump_lines(
         release,
-        docker.images().build(&BuildOptions::builder(dir_as_str)
-            .tag(format!("fappa-{}", release.codename()))
-            .network_mode("mope")
-            .build())?,
+        docker
+            .images()
+            .build(&BuildOptions::builder(tempdir_as_bad_str(&dir)?)
+                .tag(format!("fappa-{}", release.codename()))
+                .network_mode("mope")
+                .build())?,
     )?;
 
     Ok(())
+}
+
+fn tempdir_as_bad_str(dir: &TempDir) -> Result<&str, Error> {
+    dir.path()
+        .as_os_str()
+        .to_str()
+        .ok_or(format_err!("unrepresentable path and dumb library"))
 }
 
 fn dump_lines(
@@ -222,7 +227,7 @@ fn main() -> Result<(), Error> {
         ("build", _) => {
             for package in specs::load_from("specs")? {
                 for release in &RELEASES {
-                    build::build(release, &package)?;
+                    build::build(&docker, release, &package)?;
                 }
             }
         }

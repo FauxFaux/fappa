@@ -6,13 +6,13 @@ use git2;
 use url::Url;
 
 #[derive(Copy, Clone, Debug)]
-enum GitSpecifier {
+pub enum GitSpecifier {
     Hash(git2::Oid),
 }
 
 pub struct LocalRepo {
-    specifier: GitSpecifier,
-    path: PathBuf,
+    pub specifier: GitSpecifier,
+    pub path: String,
 }
 
 impl GitSpecifier {
@@ -26,6 +26,12 @@ impl GitSpecifier {
             } else {
                 Ok(true)
             },
+        }
+    }
+
+    pub fn git_args(self) -> String {
+        match self {
+            GitSpecifier::Hash(oid) => format!("checkout -B build {}", oid),
         }
     }
 }
@@ -71,9 +77,10 @@ pub fn check_cloned<S: AsRef<str>>(url: S) -> Result<LocalRepo, Error> {
     Ok(LocalRepo { path, specifier })
 }
 
-fn check_single(url: Url, specifier: GitSpecifier) -> Result<(git2::Repository, PathBuf), Error> {
+fn check_single(url: Url, specifier: GitSpecifier) -> Result<(git2::Repository, String), Error> {
     let mut path = PathBuf::from(".cache");
-    path.push(fs_safe_url(&url));
+    let safe_url = fs_safe_url(&url);
+    path.push(&safe_url);
 
     let repo = if !path.is_dir() {
         fs::create_dir_all(&path)?;
@@ -94,10 +101,10 @@ fn check_single(url: Url, specifier: GitSpecifier) -> Result<(git2::Repository, 
         );
     }
 
-    Ok((repo, path))
+    Ok((repo, safe_url))
 }
 
-fn fs_safe_url(url: &Url) -> String {
+pub fn fs_safe_url(url: &Url) -> String {
     assert_eq!(None, url.query());
     url.as_str().replace(|c: char| !c.is_alphanumeric(), "_")
 }
