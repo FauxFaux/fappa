@@ -50,8 +50,7 @@ pub fn build(docker: &Docker, release: &Release, package: &Package) -> Result<()
                 Command::WorkDir(dir) => writeln!(dockerfile, "WORKDIR {}", dir)?,
                 Command::Autoreconf => writeln!(
                     dockerfile,
-                    "ENV PYTHONPATH=/usr/lib/python2.7/site-packages/\n\
-                    RUN autoreconf -fvi && ./configure --prefix=/usr/local && make -j 2"
+                    "RUN autoreconf -fvi && ./configure --prefix=/usr/local && make -j 2"
                 )?,
                 _ => unimplemented!("build: {:?}", command),
             }
