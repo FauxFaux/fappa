@@ -160,7 +160,9 @@ fn tempdir_as_bad_str(dir: &TempDir) -> Result<&str, Error> {
 fn dump_lines(
     release: Release,
     lines: Box<Iterator<Item = rustc_serialize::json::Json>>,
-) -> Result<(), Error> {
+) -> Result<Option<String>, Error> {
+    let mut last_id = None;
+
     for line in lines {
         let line = line
             .as_object()
@@ -174,13 +176,16 @@ fn dump_lines(
                 );
             }
         } else if let Some(aux) = line.get("aux").and_then(|aux| aux.as_object()) {
+            if let Some(id) = aux.get("ID").and_then(|id| id.as_string()) {
+                last_id = Some(id.to_string());
+            }
             println!("[{}] aux: {:?}", release.codename(), aux)
         } else {
             bail!("unknown notification: {:?}", line);
         }
     }
 
-    Ok(())
+    Ok(last_id)
 }
 
 fn main() -> Result<(), Error> {

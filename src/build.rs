@@ -3,7 +3,9 @@ use std::io::Write;
 
 use failure::Error;
 use fs_extra::dir;
+use shiplift::rep::ContainerCreateInfo;
 use shiplift::BuildOptions;
+use shiplift::ContainerOptions;
 use shiplift::Docker;
 use tempdir;
 
@@ -22,7 +24,11 @@ pub fn build(docker: &Docker, release: &Release, package: &Package) -> Result<()
         writeln!(dockerfile, "WORKDIR /build")?;
 
         if !package.build_dep.is_empty() {
-            writeln!(dockerfile, "RUN DEBIAN_FRONTEND=noninteractive apt-get install -y {}", package.build_dep.join(" "))?;
+            writeln!(
+                dockerfile,
+                "RUN DEBIAN_FRONTEND=noninteractive apt-get install -y {}",
+                package.build_dep.join(" ")
+            )?;
         }
 
         for command in &package.source {
@@ -58,19 +64,30 @@ pub fn build(docker: &Docker, release: &Release, package: &Package) -> Result<()
 
         for command in &package.install {
             match command {
-                Command::Run(what) => writeln!(dockerfile, "RUN {}", what)?,
+                Command::Run(what) => writeln!(dockerfile, "CMD {}", what)?,
                 _ => unimplemented!("install: {:?}", command),
             }
         }
     }
 
-    ::dump_lines(
+    let built_id = ::dump_lines(
         *release,
         docker
             .images()
             .build(&BuildOptions::builder(::tempdir_as_bad_str(&dir)?)
                 .network_mode("mope")
                 .build())?,
-    )?;
+    )?.ok_or_else(|| format_err!("build didn't build an id"))?;
+
+    let containers = docker.containers();
+
+    let ContainerCreateInfo { Id: id, .. } =
+        containers.create(&ContainerOptions::builder(&built_id).build())?;
+
+    println!("starting install container {}", id);
+    let created = containers.get(&id);
+    created.start()?;
+    created.wait()?;
+    println!("done!");
     Ok(())
 }
