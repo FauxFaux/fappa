@@ -20,6 +20,8 @@ struct PackageSerialisation {
     source: Vec<String>,
     build: Vec<String>,
     install: Vec<String>,
+    include_files: Vec<String>,
+    exclude_files: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -30,6 +32,8 @@ pub struct Package {
     pub source: Vec<Command>,
     pub build: Vec<Command>,
     pub install: Vec<Command>,
+    pub include_files: Vec<String>,
+    pub exclude_files: Vec<String>,
 }
 
 impl Package {
@@ -42,6 +46,8 @@ impl Package {
             source: parse_commands(p.source).with_context(|_| format!("source in {}", context))?,
             build: parse_commands(p.build).with_context(|_| format!("build in {}", context))?,
             install: parse_commands(p.install).with_context(|_| format!("install in {}", context))?,
+            include_files: p.include_files,
+            exclude_files: p.exclude_files,
         })
     }
 }

@@ -35,3 +35,11 @@ build = [
 install = [
   "RUN make install",
 ]
+
+include_files = [
+  "/usr/local/**",
+]
+
+exclude_files = [
+  "/build/**",
+]
