@@ -13,6 +13,23 @@ use specs::Command;
 use specs::Package;
 use Release;
 
+enum Kind {
+    Modified,
+    Added,
+    Deleted,
+}
+
+impl From<u64> for Kind {
+    fn from(val: u64) -> Self {
+        match val {
+            0 => Kind::Modified,
+            1 => Kind::Added,
+            2 => Kind::Deleted,
+            other => panic!("invalid change kind: {}", other),
+        }
+    }
+}
+
 pub fn build(docker: &Docker, release: &Release, package: &Package) -> Result<(), Error> {
     let dir = tempdir::TempDir::new("fappa")?;
     {
@@ -89,5 +106,19 @@ pub fn build(docker: &Docker, release: &Release, package: &Package) -> Result<()
     created.start()?;
     created.wait()?;
     println!("done!");
+
+    let mut new = Vec::new();
+    let mut rm = Vec::new();
+
+    for change in created.changes()? {
+        match change.Kind.into() {
+            Kind::Modified | Kind::Added => new.push(change.Path),
+            Kind::Deleted => rm.push(change.Path),
+        }
+    }
+
+    println!("{:?}", new);
+    println!("{:?}", rm);
+
     Ok(())
 }
