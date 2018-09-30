@@ -38,19 +38,17 @@ pub enum Release {
     DebianBuster,
     UbuntuTrusty,
     UbuntuXenial,
-    UbuntuArtful,
     UbuntuBionic,
     UbuntuCosmic,
 }
 
-const RELEASES: [Release; 8] = [
+const RELEASES: [Release; 7] = [
     // best
     Release::UbuntuBionic,
     Release::DebianStretch,
     // older but supported
     Release::UbuntuXenial,
     Release::UbuntuTrusty,
-    Release::UbuntuArtful,
     Release::DebianJessie,
     // pre-release
     Release::UbuntuCosmic,
@@ -62,7 +60,7 @@ impl Release {
         use Release::*;
         match self {
             | DebianJessie | DebianStretch | DebianBuster => "debian",
-            | UbuntuTrusty | UbuntuXenial | UbuntuArtful | UbuntuBionic | UbuntuCosmic => "ubuntu",
+            | UbuntuTrusty | UbuntuXenial | UbuntuBionic | UbuntuCosmic => "ubuntu",
         }
     }
 
@@ -74,7 +72,6 @@ impl Release {
             | DebianBuster => "buster",
             | UbuntuTrusty => "trusty",
             | UbuntuXenial => "xenial",
-            | UbuntuArtful => "artful",
             | UbuntuBionic => "bionic",
             | UbuntuCosmic => "cosmic",
         }
@@ -91,7 +88,6 @@ impl Release {
             | DebianBuster => true,
             | UbuntuTrusty => false,
             | UbuntuXenial => true,
-            | UbuntuArtful => true,
             | UbuntuBionic => true,
             | UbuntuCosmic => true,
         }
