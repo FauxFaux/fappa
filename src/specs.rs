@@ -79,6 +79,10 @@ fn parse_command<S: AsRef<str>>(cmd: S) -> Result<Command, Error> {
             ensure!(args.is_empty(), "autoreconf takes no arguments: {:?}", args);
             Command::Autoreconf
         }
+        "CMAKE" => {
+            ensure!(args.is_empty(), "cmake takes no arguments: {:?}", args);
+            Command::CMake
+        }
         "WORKDIR" => Command::WorkDir(args.to_string()),
         "RUN" => Command::Run(args.to_string()),
         other => bail!("unrecognised op: {:?}", other),
@@ -100,6 +104,7 @@ pub enum Command {
     Clone { repo: Url, dest: String },
     WorkDir(String),
     Autoreconf,
+    CMake,
     Run(String),
 }
 

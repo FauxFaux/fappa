@@ -1,4 +1,44 @@
 [[package]]
+name = "libftdi1-dev"
+
+build_dep = [
+    "cmake",
+
+    "libusb-1.0-0-dev",
+    "libconfuse-dev",
+
+    "swig",
+    "python-dev",
+
+    "libboost-dev",
+    "libboost-test-dev",
+
+    "doxygen",
+]
+dep = [
+]
+
+source = [
+  "CLONE git://developer.intra2net.com/libftdi?rev=d5c1622a2ff0c722c0dc59533748489b45774e55 libftdi",
+]
+build = [
+  "WORKDIR libftdi",
+  "CMAKE",
+]
+install = [
+  "RUN make install",
+]
+
+include_files = [
+  "/usr/local/**",
+]
+
+exclude_files = [
+  "/build/**",
+]
+
+
+[[package]]
 name = "libsigrok"
 
 build_dep = [

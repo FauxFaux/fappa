@@ -75,6 +75,10 @@ pub fn build(docker: &Docker, release: &Release, package: &Package) -> Result<()
                     dockerfile,
                     "RUN autoreconf -fvi && ./configure --prefix=/usr/local && make -j 2"
                 )?,
+                Command::CMake => writeln!(
+                    dockerfile,
+                    "RUN mkdir cmake-build-package && cd cmake-build-package && cmake .. && make -j 2"
+                )?,
                 _ => unimplemented!("build: {:?}", command),
             }
         }
