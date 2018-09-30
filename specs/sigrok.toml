@@ -6,15 +6,18 @@ build_dep = [
     "libzip-dev",
 
     # optional
-    "libglibmm-2.4-dev",
     "libftdi1-dev",
-    "libusb-1.0-0-dev",
+    "libglibmm-2.4-dev",
     "libieee1284-3-dev",
+    "libserialport-dev",
+    "libusb-1.0-0-dev",
 
     "python-dev",
     "python-gi-dev",
     "python-setuptools",
     "python-numpy",
+
+    "ruby-dev",
 
     # makes autoconf pick up python
     "autoconf-archive",
@@ -26,7 +29,7 @@ build_dep = [
 dep = []
 
 source = [
-  "CLONE git://sigrok.org/libsigrok?rev=090f1e1e5478ea15baa3731fefbd4aff9be78c77 libsigrok",
+  "CLONE git://sigrok.org/libsigrok?rev=56bcbbffd059b0049e530481e2842a5ac48fd447 libsigrok",
 ]
 build = [
   "WORKDIR libsigrok",

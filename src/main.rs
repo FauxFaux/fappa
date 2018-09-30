@@ -59,21 +59,21 @@ impl Release {
     fn distro(&self) -> &'static str {
         use Release::*;
         match self {
-            | DebianJessie | DebianStretch | DebianBuster => "debian",
-            | UbuntuTrusty | UbuntuXenial | UbuntuBionic | UbuntuCosmic => "ubuntu",
+            DebianJessie | DebianStretch | DebianBuster => "debian",
+            UbuntuTrusty | UbuntuXenial | UbuntuBionic | UbuntuCosmic => "ubuntu",
         }
     }
 
     fn codename(&self) -> &'static str {
         use Release::*;
         match self {
-            | DebianJessie => "jessie",
-            | DebianStretch => "stretch",
-            | DebianBuster => "buster",
-            | UbuntuTrusty => "trusty",
-            | UbuntuXenial => "xenial",
-            | UbuntuBionic => "bionic",
-            | UbuntuCosmic => "cosmic",
+            DebianJessie => "jessie",
+            DebianStretch => "stretch",
+            DebianBuster => "buster",
+            UbuntuTrusty => "trusty",
+            UbuntuXenial => "xenial",
+            UbuntuBionic => "bionic",
+            UbuntuCosmic => "cosmic",
         }
     }
 
@@ -83,13 +83,13 @@ impl Release {
     fn locales_all(&self) -> bool {
         use Release::*;
         match self {
-            | DebianJessie => false,
-            | DebianStretch => true,
-            | DebianBuster => true,
-            | UbuntuTrusty => false,
-            | UbuntuXenial => true,
-            | UbuntuBionic => true,
-            | UbuntuCosmic => true,
+            DebianJessie => false,
+            DebianStretch => true,
+            DebianBuster => true,
+            UbuntuTrusty => false,
+            UbuntuXenial => true,
+            UbuntuBionic => true,
+            UbuntuCosmic => true,
         }
     }
 }
@@ -135,12 +135,12 @@ fn build_template(docker: &Docker, release: Release) -> Result<(), Error> {
 
     dump_lines(
         release,
-        docker
-            .images()
-            .build(&BuildOptions::builder(tempdir_as_bad_str(&dir)?)
+        docker.images().build(
+            &BuildOptions::builder(tempdir_as_bad_str(&dir)?)
                 .tag(format!("fappa-{}", release.codename()))
                 .network_mode("mope")
-                .build())?,
+                .build(),
+        )?,
     )?;
 
     Ok(())
@@ -203,10 +203,12 @@ fn main() -> Result<(), Error> {
                 for release in &RELEASES {
                     print!("Pulling {:?}..", release);
                     io::stdout().flush()?;
-                    docker.images().pull(&shiplift::PullOptions::builder()
-                        .image(release.distro())
-                        .tag(release.codename())
-                        .build())?;
+                    docker.images().pull(
+                        &shiplift::PullOptions::builder()
+                            .image(release.distro())
+                            .tag(release.codename())
+                            .build(),
+                    )?;
                     println!(". done.");
                 }
             }

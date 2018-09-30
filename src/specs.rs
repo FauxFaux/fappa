@@ -45,7 +45,8 @@ impl Package {
             dep: p.dep,
             source: parse_commands(p.source).with_context(|_| format!("source in {}", context))?,
             build: parse_commands(p.build).with_context(|_| format!("build in {}", context))?,
-            install: parse_commands(p.install).with_context(|_| format!("install in {}", context))?,
+            install: parse_commands(p.install)
+                .with_context(|_| format!("install in {}", context))?,
             include_files: p.include_files,
             exclude_files: p.exclude_files,
         })
@@ -122,15 +123,16 @@ pub fn load_from<P: AsRef<Path>>(dir: P) -> Result<Vec<Package>, Error> {
         }
 
         let spec: Spec = toml::from_slice(
-            &fs::read(entry.path()).with_context(|_| format!("opening {:?}", entry.path()))?
+            &fs::read(entry.path()).with_context(|_| format!("opening {:?}", entry.path()))?,
         )?;
 
-        ret.extend(spec
-            .package
-            .into_iter()
-            .map(Package::from_str)
-            .collect::<Result<Vec<Package>, Error>>()
-            .with_context(|_| format!("parsing an entry in {:?}", entry.path()))?)
+        ret.extend(
+            spec.package
+                .into_iter()
+                .map(Package::from_str)
+                .collect::<Result<Vec<Package>, Error>>()
+                .with_context(|_| format!("parsing an entry in {:?}", entry.path()))?,
+        )
     }
 
     Ok(ret)

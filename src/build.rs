@@ -44,7 +44,7 @@ pub fn build(docker: &Docker, release: &Release, package: &Package) -> Result<()
             writeln!(
                 dockerfile,
                 "RUN DEBIAN_FRONTEND=noninteractive apt-get install -y {}",
-                package.build_dep.join(" ")
+                sorted_spaced(&package.build_dep),
             )?;
         }
 
@@ -57,7 +57,7 @@ pub fn build(docker: &Docker, release: &Release, package: &Package) -> Result<()
                     writeln!(dockerfile, "COPY {} /repo/{}", path, path)?;
                     writeln!(
                         dockerfile,
-                        "RUN git clone /repo/{} {} && (cd {} && git {})",
+                        "RUN git clone --no-checkout /repo/{} {} && (cd {} && git {})",
                         path,
                         dest,
                         dest,
@@ -89,12 +89,13 @@ pub fn build(docker: &Docker, release: &Release, package: &Package) -> Result<()
 
     let built_id = ::dump_lines(
         *release,
-        docker
-            .images()
-            .build(&BuildOptions::builder(::tempdir_as_bad_str(&dir)?)
+        docker.images().build(
+            &BuildOptions::builder(::tempdir_as_bad_str(&dir)?)
                 .network_mode("mope")
-                .build())?,
-    )?.ok_or_else(|| format_err!("build didn't build an id"))?;
+                .build(),
+        )?,
+    )?
+    .ok_or_else(|| format_err!("build didn't build an id"))?;
 
     let containers = docker.containers();
 
@@ -171,4 +172,10 @@ fn matches(path: &str, patterns: &[String]) -> bool {
     }
 
     false
+}
+
+fn sorted_spaced<S: AsRef<str>, T: IntoIterator<Item = S>>(list: T) -> String {
+    let mut vec: Vec<String> = list.into_iter().map(|x| x.as_ref().to_string()).collect();
+    vec.sort();
+    vec.join(" ")
 }

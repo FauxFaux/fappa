@@ -2,6 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use failure::Error;
+use failure::ResultExt;
 use git2;
 use url::Url;
 
@@ -18,14 +19,16 @@ pub struct LocalRepo {
 impl GitSpecifier {
     fn find_in(self, repo: &git2::Repository) -> Result<bool, Error> {
         match self {
-            GitSpecifier::Hash(oid) => if let Err(e) = repo.find_commit(oid) {
-                match e.code() {
-                    git2::ErrorCode::NotFound => Ok(false),
-                    _ => bail!(e),
+            GitSpecifier::Hash(oid) => {
+                if let Err(e) = repo.find_commit(oid) {
+                    match e.code() {
+                        git2::ErrorCode::NotFound => Ok(false),
+                        _ => bail!(e),
+                    }
+                } else {
+                    Ok(true)
                 }
-            } else {
-                Ok(true)
-            },
+            }
         }
     }
 
@@ -53,7 +56,8 @@ pub fn check_cloned<S: AsRef<str>>(url: S) -> Result<LocalRepo, Error> {
 
     url.set_query(None);
 
-    let (repo, path) = check_single(url, specifier)?;
+    let (repo, path) = check_single(&url, specifier)
+        .with_context(|_| format_err!("checking repo {} {:?}", url, specifier))?;
 
     // fails 'cos we don't have a working tree, right
     if false {
@@ -61,7 +65,7 @@ pub fn check_cloned<S: AsRef<str>>(url: S) -> Result<LocalRepo, Error> {
             // TODO: not clear this index_id actually returns anything useful
             if let Some(oid) = submodule.index_id() {
                 check_single(
-                    submodule
+                    &submodule
                         .url()
                         .ok_or(format_err!(
                             "invalid submodule utf-8: {:?}",
@@ -77,21 +81,30 @@ pub fn check_cloned<S: AsRef<str>>(url: S) -> Result<LocalRepo, Error> {
     Ok(LocalRepo { path, specifier })
 }
 
-fn check_single(url: Url, specifier: GitSpecifier) -> Result<(git2::Repository, String), Error> {
+fn check_single(url: &Url, specifier: GitSpecifier) -> Result<(git2::Repository, String), Error> {
     let mut path = PathBuf::from(".cache");
     let safe_url = fs_safe_url(&url);
     path.push(&safe_url);
 
     let repo = if !path.is_dir() {
-        fs::create_dir_all(&path)?;
-        git2::Repository::init_bare(&path)?
+        fs::create_dir_all(&path).with_context(|_| format_err!("creating repo dir in cache"))?;
+        git2::Repository::init_bare(&path)
+            .with_context(|_| format_err!("initialising cache repository"))?
     } else {
-        git2::Repository::open_bare(&path)?
+        git2::Repository::open_bare(&path).with_context(|_| format_err!("opening cache repo"))?
     };
 
     if !specifier.find_in(&repo)? {
+        let remote_name = "upstream";
+
+        // if it's already there, just blow it away; easier than checking the URL is right etc.
+        // not too horribly inefficient as we're only here 'cos we're going to download anyway
+        if repo.find_remote(remote_name).is_ok() {
+            repo.remote_delete(remote_name)?;
+        }
+
         // empty fetch array here undocumented, but seems to work?
-        repo.remote("upstream", url.as_str())?
+        repo.remote(remote_name, url.as_str())?
             .fetch(&[], None, None)?;
 
         ensure!(
