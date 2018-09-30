@@ -74,9 +74,7 @@ RUN \
         libseccomp-dev \
     && apt-get clean
 
-COPY all-caps.h /tmp/all-caps.h
-COPY drop-privs-harder.c /tmp/drop-privs-harder.c
-COPY drop-all-caps.c /tmp/drop-all-caps.c
+COPY all-caps.h drop-privs-harder.c drop-all-caps.c  /tmp/
 
 RUN \
     useradd -ms /bin/bash build && \
