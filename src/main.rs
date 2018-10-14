@@ -135,7 +135,7 @@ fn build_template(docker: &Docker, release: Release) -> Result<(), Error> {
 
     dump_lines(
         release,
-        docker.images().build(
+        &docker.images().build(
             &BuildOptions::builder(tempdir_as_bad_str(&dir)?)
                 .tag(format!("fappa-{}", release.codename()))
                 .network_mode("mope")
@@ -155,7 +155,7 @@ fn tempdir_as_bad_str(dir: &TempDir) -> Result<&str, Error> {
 
 fn dump_lines(
     release: Release,
-    lines: Box<Iterator<Item = rustc_serialize::json::Json>>,
+    lines: &[serde_json::Value],
 ) -> Result<Option<String>, Error> {
     let mut last_id = None;
 
@@ -163,7 +163,7 @@ fn dump_lines(
         let line = line
             .as_object()
             .ok_or_else(|| format_err!("unexpected line: {:?}", line))?;
-        if let Some(msg) = line.get("stream").and_then(|stream| stream.as_string()) {
+        if let Some(msg) = line.get("stream").and_then(|stream| stream.as_str()) {
             for line in msg.trim_right_matches('\n').split('\n') {
                 println!(
                     "[{}] log: {}",
@@ -172,7 +172,7 @@ fn dump_lines(
                 );
             }
         } else if let Some(aux) = line.get("aux").and_then(|aux| aux.as_object()) {
-            if let Some(id) = aux.get("ID").and_then(|id| id.as_string()) {
+            if let Some(id) = aux.get("ID").and_then(|id| id.as_str()) {
                 last_id = Some(id.to_string());
             }
             println!("[{}] aux: {:?}", release.codename(), aux)

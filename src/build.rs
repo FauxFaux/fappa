@@ -93,7 +93,7 @@ pub fn build(docker: &Docker, release: &Release, package: &Package) -> Result<()
 
     let built_id = ::dump_lines(
         *release,
-        docker.images().build(
+        &docker.images().build(
             &BuildOptions::builder(::tempdir_as_bad_str(&dir)?)
                 .network_mode("mope")
                 .build(),
@@ -103,7 +103,7 @@ pub fn build(docker: &Docker, release: &Release, package: &Package) -> Result<()
 
     let containers = docker.containers();
 
-    let ContainerCreateInfo { Id: id, .. } =
+    let ContainerCreateInfo { id, .. } =
         containers.create(&ContainerOptions::builder(&built_id).build())?;
 
     println!("starting install container {}", id);
@@ -116,9 +116,9 @@ pub fn build(docker: &Docker, release: &Release, package: &Package) -> Result<()
     let mut rm = Vec::new();
 
     for change in created.changes()? {
-        match change.Kind.into() {
-            Kind::Modified | Kind::Added => new.push(change.Path),
-            Kind::Deleted => rm.push(change.Path),
+        match change.kind.into() {
+            Kind::Modified | Kind::Added => new.push(change.path),
+            Kind::Deleted => rm.push(change.path),
         }
     }
 

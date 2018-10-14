@@ -19,5 +19,6 @@ url = "1"
 walkdir = "2"
 
 [dependencies.shiplift]
+# HEAD just after 0.3.0; no reason except I'm probably going to be hacking it
 git = "https://github.com/FauxFaux/shiplift"
-rev = "3c26cb98bea16fd94b5ea1fdaf6b08030b755daf"
+rev = "06a01b8ebfbeecfab3211e0d273e4790adb904b7"
