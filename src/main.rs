@@ -57,7 +57,7 @@ const RELEASES: [Release; 7] = [
 
 impl Release {
     fn distro(&self) -> &'static str {
-        use Release::*;
+        use crate::Release::*;
         match self {
             DebianJessie | DebianStretch | DebianBuster => "debian",
             UbuntuTrusty | UbuntuXenial | UbuntuBionic | UbuntuCosmic => "ubuntu",
@@ -65,7 +65,7 @@ impl Release {
     }
 
     fn codename(&self) -> &'static str {
-        use Release::*;
+        use crate::Release::*;
         match self {
             DebianJessie => "jessie",
             DebianStretch => "stretch",
@@ -81,7 +81,7 @@ impl Release {
     /// environment a lot more sane for builds. Perhaps we should generate some
     /// extra locales on these distros?
     fn locales_all(&self) -> bool {
-        use Release::*;
+        use crate::Release::*;
         match self {
             DebianJessie => false,
             DebianStretch => true,

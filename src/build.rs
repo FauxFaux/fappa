@@ -9,9 +9,9 @@ use shiplift::ContainerOptions;
 use shiplift::Docker;
 use tempdir;
 
-use specs::Command;
-use specs::Package;
-use Release;
+use crate::specs::Command;
+use crate::specs::Package;
+use crate::Release;
 
 enum Kind {
     Modified,
@@ -51,7 +51,7 @@ pub fn build(docker: &Docker, release: &Release, package: &Package) -> Result<()
         for command in &package.source {
             match command {
                 Command::Clone { repo, dest } => {
-                    let ::git::LocalRepo { specifier, path } = ::git::check_cloned(repo)?;
+                    let crate::git::LocalRepo { specifier, path } = crate::git::check_cloned(repo)?;
 
                     dir::copy(format!(".cache/{}", path), &dir, &dir::CopyOptions::new())?;
                     writeln!(dockerfile, "COPY {} /repo/{}", path, path)?;
@@ -91,10 +91,10 @@ pub fn build(docker: &Docker, release: &Release, package: &Package) -> Result<()
         }
     }
 
-    let built_id = ::dump_lines(
+    let built_id = crate::dump_lines(
         *release,
         &docker.images().build(
-            &BuildOptions::builder(::tempdir_as_bad_str(&dir)?)
+            &BuildOptions::builder(crate::tempdir_as_bad_str(&dir)?)
                 .network_mode("mope")
                 .build(),
         )?,
