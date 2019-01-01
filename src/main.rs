@@ -3,6 +3,7 @@ extern crate fs_extra;
 
 #[macro_use]
 extern crate failure;
+extern crate futures;
 extern crate git2;
 extern crate handlebars;
 extern crate rustc_serialize;
@@ -30,6 +31,7 @@ use failure::Error;
 use shiplift::BuildOptions;
 use shiplift::Docker;
 use tempdir::TempDir;
+use futures::Stream;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Release {
@@ -135,12 +137,12 @@ fn build_template(docker: &Docker, release: Release) -> Result<(), Error> {
 
     dump_lines(
         release,
-        &docker.images().build(
+        docker.images().build(
             &BuildOptions::builder(tempdir_as_bad_str(&dir)?)
                 .tag(format!("fappa-{}", release.codename()))
                 .network_mode("mope")
                 .build(),
-        )?,
+        ),
     )?;
 
     Ok(())
@@ -153,13 +155,16 @@ fn tempdir_as_bad_str(dir: &TempDir) -> Result<&str, Error> {
         .ok_or(format_err!("unrepresentable path and dumb library"))
 }
 
-fn dump_lines(
+fn dump_lines<S>(
     release: Release,
-    lines: &[serde_json::Value],
-) -> Result<Option<String>, Error> {
+    lines: S,
+) -> Result<Option<String>, Error>
+where
+    S: futures::Stream<Item=serde_json::Value, Error = shiplift::Error> {
     let mut last_id = None;
 
-    for line in lines {
+    for line in lines.wait() {
+        let line = line?;
         let line = line
             .as_object()
             .ok_or_else(|| format_err!("unexpected line: {:?}", line))?;
@@ -208,7 +213,7 @@ fn main() -> Result<(), Error> {
                             .image(release.distro())
                             .tag(release.codename())
                             .build(),
-                    )?;
+                    ).wait().for_each(|line| println!("{:?}", line));
                     println!(". done.");
                 }
             }

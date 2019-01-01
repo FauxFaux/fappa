@@ -8,6 +8,7 @@ use shiplift::BuildOptions;
 use shiplift::ContainerOptions;
 use shiplift::Docker;
 use tempdir;
+use futures::future::Future;
 
 use specs::Command;
 use specs::Package;
@@ -93,29 +94,29 @@ pub fn build(docker: &Docker, release: &Release, package: &Package) -> Result<()
 
     let built_id = ::dump_lines(
         *release,
-        &docker.images().build(
+        docker.images().build(
             &BuildOptions::builder(::tempdir_as_bad_str(&dir)?)
                 .network_mode("mope")
                 .build(),
-        )?,
+        ),
     )?
     .ok_or_else(|| format_err!("build didn't build an id"))?;
 
     let containers = docker.containers();
 
     let ContainerCreateInfo { id, .. } =
-        containers.create(&ContainerOptions::builder(&built_id).build())?;
+        tokio::run(containers.create(&ContainerOptions::builder(&built_id).build()))?;
 
     println!("starting install container {}", id);
     let created = containers.get(&id);
-    created.start()?;
-    created.wait()?;
+    created.start().wait()?;
+    created.wait().wait()?;
     println!("done!");
 
     let mut new = Vec::new();
     let mut rm = Vec::new();
 
-    for change in created.changes()? {
+    for change in created.changes().wait()? {
         match change.kind.into() {
             Kind::Modified | Kind::Added => new.push(change.path),
             Kind::Deleted => rm.push(change.path),
