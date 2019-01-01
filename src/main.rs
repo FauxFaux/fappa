@@ -13,7 +13,6 @@ extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
 extern crate shiplift;
-extern crate tempdir;
 extern crate toml;
 extern crate url;
 extern crate walkdir;
@@ -29,7 +28,7 @@ use std::io::Write;
 use failure::Error;
 use shiplift::BuildOptions;
 use shiplift::Docker;
-use tempdir::TempDir;
+use tempfile::TempDir;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Release {
@@ -95,7 +94,7 @@ impl Release {
 }
 
 fn build_template(docker: &Docker, release: Release) -> Result<(), Error> {
-    let dir = tempdir::TempDir::new("fappa")?;
+    let dir = tempfile::TempDir::new()?;
     let from = format!("{}:{}", release.distro(), release.codename());
 
     {
@@ -161,7 +160,7 @@ fn dump_lines(release: Release, lines: &[serde_json::Value]) -> Result<Option<St
             .as_object()
             .ok_or_else(|| format_err!("unexpected line: {:?}", line))?;
         if let Some(msg) = line.get("stream").and_then(|stream| stream.as_str()) {
-            for line in msg.trim_right_matches('\n').split('\n') {
+            for line in msg.trim_end_matches('\n').split('\n') {
                 println!(
                     "[{}] log: {}",
                     release.codename(),

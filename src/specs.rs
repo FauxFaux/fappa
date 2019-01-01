@@ -93,7 +93,7 @@ fn split_space(s: &str) -> (&str, &str) {
     match s.find(' ') {
         Some(p) => {
             let (left, right) = s.split_at(p);
-            (left.trim(), right.trim_left())
+            (left.trim(), right.trim_start())
         }
         None => (s.trim(), ""),
     }

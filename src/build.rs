@@ -7,7 +7,7 @@ use shiplift::rep::ContainerCreateInfo;
 use shiplift::BuildOptions;
 use shiplift::ContainerOptions;
 use shiplift::Docker;
-use tempdir;
+use tempfile;
 
 use crate::specs::Command;
 use crate::specs::Package;
@@ -31,7 +31,7 @@ impl From<u64> for Kind {
 }
 
 pub fn build(docker: &Docker, release: &Release, package: &Package) -> Result<(), Error> {
-    let dir = tempdir::TempDir::new("fappa")?;
+    let dir = tempfile::TempDir::new()?;
     {
         let mut dockerfile = dir.path().to_path_buf();
         dockerfile.push("Dockerfile");
@@ -161,7 +161,7 @@ pub fn build(docker: &Docker, release: &Release, package: &Package) -> Result<()
 fn matches(path: &str, patterns: &[String]) -> bool {
     for pattern in patterns {
         if pattern.ends_with("/**") {
-            let pattern = pattern.trim_right_matches('*');
+            let pattern = pattern.trim_end_matches('*');
             assert!(
                 !pattern.contains(|c: char| c == '*' || '?' == c),
                 "unsupported pattern extra wildcards: {}",
