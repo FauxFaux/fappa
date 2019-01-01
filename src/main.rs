@@ -107,9 +107,9 @@ fn build_template(docker: &Docker, release: Release) -> Result<(), Error> {
         reg.render_template_to_write(
             include_str!("prepare-image.Dockerfile.hbs"),
             &json!({
-            "from": from,
-            "locales": if release.locales_all() { "locales-all" } else { "locales" },
-        }),
+                "from": from,
+                "locales": if release.locales_all() { "locales-all" } else { "locales" },
+            }),
             &mut dockerfile,
         )?;
 
@@ -153,10 +153,7 @@ fn tempdir_as_bad_str(dir: &TempDir) -> Result<&str, Error> {
         .ok_or(format_err!("unrepresentable path and dumb library"))
 }
 
-fn dump_lines(
-    release: Release,
-    lines: &[serde_json::Value],
-) -> Result<Option<String>, Error> {
+fn dump_lines(release: Release, lines: &[serde_json::Value]) -> Result<Option<String>, Error> {
     let mut last_id = None;
 
     for line in lines {
