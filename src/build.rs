@@ -3,10 +3,6 @@ use std::io::Write;
 
 use failure::Error;
 use fs_extra::dir;
-use shiplift::rep::ContainerCreateInfo;
-use shiplift::BuildOptions;
-use shiplift::ContainerOptions;
-use shiplift::Docker;
 use tempfile;
 
 use crate::specs::Command;
@@ -30,7 +26,7 @@ impl From<u64> for Kind {
     }
 }
 
-pub fn build(docker: &Docker, release: &Release, package: &Package) -> Result<(), Error> {
+pub fn build(docker: (), release: &Release, package: &Package) -> Result<(), Error> {
     let dir = tempfile::TempDir::new()?;
     {
         let mut dockerfile = dir.path().to_path_buf();
@@ -91,36 +87,20 @@ pub fn build(docker: &Docker, release: &Release, package: &Package) -> Result<()
         }
     }
 
-    let built_id = crate::dump_lines(
+    let id: String = unimplemented!(r"crate::dump_lines(
         *release,
         &docker.images().build(
             &BuildOptions::builder(crate::tempdir_as_bad_str(&dir)?)
-                .network_mode("mope")
                 .build(),
         )?,
-    )?
-    .ok_or_else(|| format_err!("build didn't build an id"))?;
-
-    let containers = docker.containers();
-
-    let ContainerCreateInfo { id, .. } =
-        containers.create(&ContainerOptions::builder(&built_id).build())?;
+    )?");
 
     println!("starting install container {}", id);
-    let created = containers.get(&id);
-    created.start()?;
-    created.wait()?;
+    let created = unimplemented!("containers.get(&id).start().wait()");
     println!("done!");
 
-    let mut new = Vec::new();
-    let mut rm = Vec::new();
-
-    for change in created.changes()? {
-        match change.kind.into() {
-            Kind::Modified | Kind::Added => new.push(change.path),
-            Kind::Deleted => rm.push(change.path),
-        }
-    }
+    let mut new: Vec<String> = Vec::new();
+    let mut rm: Vec<String> = Vec::new();
 
     // TODO: Hmm, no. Modified and Added are not the same. We need to ensure that only
     // TODO: directories are modified, and that they're in ignorable attributes?

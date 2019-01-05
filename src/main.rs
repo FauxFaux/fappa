@@ -4,15 +4,12 @@ extern crate fs_extra;
 #[macro_use]
 extern crate failure;
 extern crate git2;
-extern crate handlebars;
-extern crate rustc_serialize;
 
 #[macro_use]
 extern crate serde_derive;
 
 #[macro_use]
 extern crate serde_json;
-extern crate shiplift;
 extern crate toml;
 extern crate url;
 extern crate walkdir;
@@ -26,8 +23,6 @@ use std::io;
 use std::io::Write;
 
 use failure::Error;
-use shiplift::BuildOptions;
-use shiplift::Docker;
 use tempfile::TempDir;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -93,7 +88,7 @@ impl Release {
     }
 }
 
-fn build_template(docker: &Docker, release: Release) -> Result<(), Error> {
+fn build_template(docker: (), release: Release) -> Result<(), Error> {
     let dir = tempfile::TempDir::new()?;
     let from = format!("{}:{}", release.distro(), release.codename());
 
@@ -102,15 +97,11 @@ fn build_template(docker: &Docker, release: Release) -> Result<(), Error> {
         dockerfile.push("Dockerfile");
         let mut dockerfile = fs::File::create(dockerfile)?;
 
-        let reg = handlebars::Handlebars::new();
-        reg.render_template_to_write(
-            include_str!("prepare-image.Dockerfile.hbs"),
-            &json!({
-                "from": from,
-                "locales": if release.locales_all() { "locales-all" } else { "locales" },
-            }),
-            &mut dockerfile,
-        )?;
+        include_str!("prepare-image.Dockerfile.hbs");
+        &json!({
+            "from": from,
+            "locales": if release.locales_all() { "locales-all" } else { "locales" },
+        });
 
         for (file, content) in &[
             (
@@ -131,15 +122,16 @@ fn build_template(docker: &Docker, release: Release) -> Result<(), Error> {
             fs::File::create(new_file)?.write_all(content)?;
         }
     }
+    let tag = format!("fappa-{}", release.codename());
 
     dump_lines(
         release,
+        unimplemented!(r"
         &docker.images().build(
             &BuildOptions::builder(tempdir_as_bad_str(&dir)?)
-                .tag(format!("fappa-{}", release.codename()))
-                .network_mode("mope")
+                .tag(tag)
                 .build(),
-        )?,
+        )?"),
     )?;
 
     Ok(())
@@ -191,7 +183,7 @@ fn main() -> Result<(), Error> {
         .get_matches();
 
     // oh no I think this panics inside. /o\
-    let docker = shiplift::Docker::new();
+    let docker = unimplemented!();
 
     match matches.subcommand() {
         ("build-images", Some(matches)) => {
@@ -199,18 +191,13 @@ fn main() -> Result<(), Error> {
                 for release in &RELEASES {
                     print!("Pulling {:?}..", release);
                     io::stdout().flush()?;
-                    docker.images().pull(
-                        &shiplift::PullOptions::builder()
-                            .image(release.distro())
-                            .tag(release.codename())
-                            .build(),
-                    )?;
+                    unimplemented!();
                     println!(". done.");
                 }
             }
 
             for release in &RELEASES {
-                build_template(&docker, *release)?;
+                build_template((), *release)?;
             }
         }
         ("validate", _) => {
@@ -226,7 +213,7 @@ fn main() -> Result<(), Error> {
         ("build", _) => {
             for package in specs::load_from("specs")? {
                 for release in &RELEASES {
-                    build::build(&docker, release, &package)?;
+                    build::build((), release, &package)?;
                 }
             }
         }
