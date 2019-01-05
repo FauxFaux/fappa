@@ -176,6 +176,8 @@ fn dump_lines(release: Release, lines: &[serde_json::Value]) -> Result<Option<St
 }
 
 fn main() -> Result<(), Error> {
+    println!("{:?}", namespace::prepare()?.wait()?.code());
+
     use clap::Arg;
     use clap::SubCommand;
     let matches = clap::App::new("fappa")

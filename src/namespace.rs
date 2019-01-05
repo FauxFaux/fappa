@@ -12,7 +12,7 @@ use failure::Error;
 use failure::ResultExt;
 use rand::Rng;
 
-pub fn prepare() -> Result<(std::process::Child, RawFd), Error> {
+pub fn prepare() -> Result<process::Child, Error> {
     use nix::sys::socket::*;
 
     let (to_namespace, to_host) = socketpair(
@@ -33,7 +33,7 @@ pub fn prepare() -> Result<(std::process::Child, RawFd), Error> {
             .before_exec(move || {
                 mem::drop(OwnedFd::new(child_to_namespace));
                 let to_host = OwnedFd::new(child_to_host);
-                inside(to_host).expect("really should work out how to pass this");
+                inside().expect("really should work out how to pass this");
                 Ok(())
             })
             .spawn()?
@@ -42,20 +42,11 @@ pub fn prepare() -> Result<(std::process::Child, RawFd), Error> {
     close_stdin()?;
     mem::drop(to_host);
 
-    let mut space = CmsgSpace::<[RawFd; 1]>::new();
-    let msgs = recvmsg(to_namespace.fd, &[], Some(&mut space), MsgFlags::empty())?;
-    let mut iter = msgs.cmsgs();
-
-    let child_tun = if let Some(ControlMessage::ScmRights(fds)) = iter.next() {
-        assert_eq!(1, fds.len());
-        fds[0]
-    } else {
-        panic!("no fds");
-    };
+    // .. child actually sends something...
 
     mem::drop(to_namespace);
 
-    Ok((child, child_tun))
+    Ok(child)
 }
 
 /// Super dodgy reopen here; should re-do freopen?
@@ -83,7 +74,7 @@ fn ula_zero() -> Ipv6Addr {
     bytes.into()
 }
 
-pub fn inside(to_host: OwnedFd) -> Result<(), Error> {
+fn inside() -> Result<(), Error> {
     let real_euid = nix::unistd::geteuid();
     let real_egid = nix::unistd::getegid();
 
