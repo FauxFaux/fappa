@@ -87,13 +87,15 @@ pub fn build(docker: (), release: &Release, package: &Package) -> Result<(), Err
         }
     }
 
-    let id: String = unimplemented!(r"crate::dump_lines(
+    let id: String = unimplemented!(
+        r"crate::dump_lines(
         *release,
         &docker.images().build(
             &BuildOptions::builder(crate::tempdir_as_bad_str(&dir)?)
                 .build(),
         )?,
-    )?");
+    )?"
+    );
 
     println!("starting install container {}", id);
     let created = unimplemented!("containers.get(&id).start().wait()");

@@ -69,7 +69,9 @@ pub fn check_cloned<S: AsRef<str>>(url: S) -> Result<LocalRepo, Error> {
                         .url()
                         .ok_or(format_err!(
                             "invalid submodule utf-8: {:?}",
-                            submodule.opt_url_bytes().map(|bytes| String::from_utf8_lossy(bytes))
+                            submodule
+                                .opt_url_bytes()
+                                .map(|bytes| String::from_utf8_lossy(bytes))
                         ))?
                         .parse()?,
                     GitSpecifier::Hash(oid),

@@ -126,12 +126,14 @@ fn build_template(docker: (), release: Release) -> Result<(), Error> {
 
     dump_lines(
         release,
-        unimplemented!(r"
+        unimplemented!(
+            r"
         &docker.images().build(
             &BuildOptions::builder(tempdir_as_bad_str(&dir)?)
                 .tag(tag)
                 .build(),
-        )?"),
+        )?"
+        ),
     )?;
 
     Ok(())

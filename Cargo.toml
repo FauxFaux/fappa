@@ -6,10 +6,11 @@ authors = ["Chris West (Faux) <git@goeswhere.com>"]
 edition = "2018"
 
 [dependencies]
-clap = "2.31"
+clap = "2.32"
 failure = "0.1"
 fs_extra = "1"
 git2 = "0.8"
+nix = "0.12"
 serde = "1"
 serde_derive = "1"
 serde_json = "1"
@@ -17,3 +18,4 @@ tempfile = "3"
 toml = "0.4"
 url = "1"
 walkdir = "2"
+psutil = "1.2.0"
