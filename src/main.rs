@@ -15,6 +15,7 @@ extern crate url;
 extern crate walkdir;
 
 mod build;
+mod fetch_images;
 mod git;
 mod namespace;
 mod specs;
@@ -176,8 +177,6 @@ fn dump_lines(release: Release, lines: &[serde_json::Value]) -> Result<Option<St
 }
 
 fn main() -> Result<(), Error> {
-    println!("{:?}", namespace::prepare()?.wait()?.code());
-
     use clap::Arg;
     use clap::SubCommand;
     let matches = clap::App::new("fappa")
@@ -185,10 +184,9 @@ fn main() -> Result<(), Error> {
         .subcommand(SubCommand::with_name("build-images").arg(Arg::with_name("pull").long("pull")))
         .subcommand(SubCommand::with_name("validate"))
         .subcommand(SubCommand::with_name("build"))
+        .subcommand(SubCommand::with_name("namespace"))
+        .subcommand(SubCommand::with_name("fetch"))
         .get_matches();
-
-    // oh no I think this panics inside. /o\
-    let docker = unimplemented!();
 
     match matches.subcommand() {
         ("build-images", Some(matches)) => {
@@ -221,6 +219,12 @@ fn main() -> Result<(), Error> {
                     build::build((), release, &package)?;
                 }
             }
+        }
+        ("namespace", _) => {
+            println!("{:?}", namespace::prepare()?.wait()?.code());
+        }
+        ("fetch", _) => {
+            fetch_images::fetch()?;
         }
         _ => unreachable!(),
     }
