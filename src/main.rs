@@ -16,6 +16,7 @@ extern crate walkdir;
 
 mod build;
 mod git;
+mod namespace;
 mod specs;
 
 use std::fs;
