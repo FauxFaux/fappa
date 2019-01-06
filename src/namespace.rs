@@ -1,3 +1,4 @@
+use std::env;
 use std::fs;
 use std::io;
 use std::io::Write;
@@ -12,7 +13,7 @@ use failure::Error;
 use failure::ResultExt;
 use rand::Rng;
 
-pub fn prepare() -> Result<process::Child, Error> {
+pub fn prepare(distro: &str) -> Result<process::Child, Error> {
     use nix::sys::socket::*;
 
     let (to_namespace, to_host) = socketpair(
@@ -26,10 +27,16 @@ pub fn prepare() -> Result<process::Child, Error> {
     let to_namespace = OwnedFd::new(to_namespace);
     let to_host = OwnedFd::new(to_host);
 
+    let root = format!("{}/root", distro);
+
+    fs::create_dir(&root)?;
+    crate::unpack::unpack(&format!("{}/amd64-root.tar.gz", distro), &root)?;
+
     let child = {
         let child_to_host = to_host.fd;
         let child_to_namespace = to_namespace.fd;
         process::Command::new("/bin/bash")
+            .current_dir(root)
             .before_exec(move || {
                 mem::drop(OwnedFd::new(child_to_namespace));
                 let to_host = OwnedFd::new(child_to_host);
@@ -67,36 +74,53 @@ fn close_stdin() -> Result<(), Error> {
     Ok(())
 }
 
-fn ula_zero() -> Ipv6Addr {
-    let mut bytes = [0u8; 16];
-    bytes[0] = 0xfd;
-    bytes[1..6].copy_from_slice(&rand::thread_rng().gen::<[u8; 5]>());
-    bytes.into()
-}
-
 fn inside() -> Result<(), Error> {
     let real_euid = nix::unistd::geteuid();
     let real_egid = nix::unistd::getegid();
 
     {
         use nix::sched::*;
-        unshare(CloneFlags::CLONE_NEWNET | CloneFlags::CLONE_NEWUSER)
-            .with_context(|_| err_msg("unsharing"))?;
+        unshare(
+            CloneFlags::CLONE_NEWIPC
+                | CloneFlags::CLONE_NEWNS
+                | CloneFlags::CLONE_NEWPID
+                | CloneFlags::CLONE_NEWUSER
+                | CloneFlags::CLONE_NEWUTS,
+        )
+        .with_context(|_| err_msg("unshare"))?;
     }
 
-    if true {
-        drop_setgroups()?;
+    {
+        let unset: Option<&str> = None;
+        use nix::mount::*;
+        mount(
+            Some("/proc"),
+            "proc",
+            unset,
+            MsFlags::MS_BIND | MsFlags::MS_REC,
+            unset,
+        )?;
 
-        fs::OpenOptions::new()
-            .write(true)
-            .open("/proc/self/uid_map")?
-            .write_all(format!("0 {} 1", real_euid).as_bytes())?;
-
-        fs::OpenOptions::new()
-            .write(true)
-            .open("/proc/self/gid_map")?
-            .write_all(format!("0 {} 1", real_egid).as_bytes())?;
+        mount(
+            Some("/sys"),
+            "sys",
+            unset,
+            MsFlags::MS_BIND | MsFlags::MS_REC,
+            unset,
+        )?;
     }
+
+    drop_setgroups()?;
+
+    fs::OpenOptions::new()
+        .write(true)
+        .open("/proc/self/uid_map")?
+        .write_all(format!("0 {} 1", real_euid).as_bytes())?;
+
+    fs::OpenOptions::new()
+        .write(true)
+        .open("/proc/self/gid_map")?
+        .write_all(format!("0 {} 1", real_egid).as_bytes())?;
 
     Ok(())
 }

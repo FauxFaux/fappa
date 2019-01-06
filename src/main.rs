@@ -19,6 +19,7 @@ mod fetch_images;
 mod git;
 mod namespace;
 mod specs;
+mod unpack;
 
 use std::fs;
 use std::io;
@@ -36,9 +37,10 @@ pub enum Release {
     UbuntuXenial,
     UbuntuBionic,
     UbuntuCosmic,
+    UbuntuDisco,
 }
 
-const RELEASES: [Release; 7] = [
+const RELEASES: [Release; 8] = [
     // best
     Release::UbuntuBionic,
     Release::DebianStretch,
@@ -48,6 +50,7 @@ const RELEASES: [Release; 7] = [
     Release::DebianJessie,
     // pre-release
     Release::UbuntuCosmic,
+    Release::UbuntuDisco,
     Release::DebianBuster,
 ];
 
@@ -56,7 +59,7 @@ impl Release {
         use crate::Release::*;
         match self {
             DebianJessie | DebianStretch | DebianBuster => "debian",
-            UbuntuTrusty | UbuntuXenial | UbuntuBionic | UbuntuCosmic => "ubuntu",
+            UbuntuTrusty | UbuntuXenial | UbuntuBionic | UbuntuCosmic | UbuntuDisco => "ubuntu",
         }
     }
 
@@ -70,6 +73,7 @@ impl Release {
             UbuntuXenial => "xenial",
             UbuntuBionic => "bionic",
             UbuntuCosmic => "cosmic",
+            UbuntuDisco => "disco",
         }
     }
 
@@ -86,6 +90,7 @@ impl Release {
             UbuntuXenial => true,
             UbuntuBionic => true,
             UbuntuCosmic => true,
+            UbuntuDisco => true,
         }
     }
 }
@@ -139,13 +144,6 @@ fn build_template(docker: (), release: Release) -> Result<(), Error> {
     )?;
 
     Ok(())
-}
-
-fn tempdir_as_bad_str(dir: &TempDir) -> Result<&str, Error> {
-    dir.path()
-        .as_os_str()
-        .to_str()
-        .ok_or(format_err!("unrepresentable path and dumb library"))
 }
 
 fn dump_lines(release: Release, lines: &[serde_json::Value]) -> Result<Option<String>, Error> {
@@ -221,10 +219,15 @@ fn main() -> Result<(), Error> {
             }
         }
         ("namespace", _) => {
-            println!("{:?}", namespace::prepare()?.wait()?.code());
+            println!("{:?}", namespace::prepare("cosmic")?.wait()?.code());
         }
         ("fetch", _) => {
-            fetch_images::fetch()?;
+            let ubuntu_codenames = RELEASES
+                .iter()
+                .filter(|r| "ubuntu" == r.distro())
+                .map(|r| r.codename())
+                .collect::<Vec<_>>();
+            fetch_images::fetch_ubuntu(&ubuntu_codenames)?;
         }
         _ => unreachable!(),
     }

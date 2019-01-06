@@ -10,9 +10,7 @@ use futures::stream::Stream;
 use reqwest::r#async::Client;
 use tokio;
 
-pub fn fetch() -> Result<(), Error> {
-    let distros = &["trusty", "xenial", "bionic", "cosmic", "disco"];
-
+pub fn fetch_ubuntu(distros: &[&str]) -> Result<(), Error> {
     let mut work = Vec::new();
 
     for distro in distros {
@@ -33,8 +31,8 @@ pub fn fetch() -> Result<(), Error> {
         ] {
             work.push((
                 format!("{}/{}", root, name),
-                format!("{}/{}", distro, name),
-                format!("{}/.{}.partial", distro, name),
+                format!("{}/{}", distro, dest),
+                format!("{}/.{}.partial", distro, dest),
                 format!("{}: {}", distro, name),
             ));
         }
