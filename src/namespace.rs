@@ -15,6 +15,7 @@ use failure::ResultExt;
 use nix::unistd::Gid;
 use nix::unistd::Uid;
 use rand::Rng;
+use std::ffi::CString;
 
 pub fn prepare(distro: &str) -> Result<process::Child, Error> {
     use nix::sys::socket::*;
@@ -38,19 +39,33 @@ pub fn prepare(distro: &str) -> Result<process::Child, Error> {
         crate::unpack::unpack(&format!("{}/amd64-root.tar.gz", distro), &root)?;
     }
 
-    let child = {
-        let child_to_host = to_host.fd;
-        let child_to_namespace = to_namespace.fd;
-        process::Command::new("/bin/bash")
-            .current_dir(root)
-            .before_exec(move || {
-                mem::drop(OwnedFd::new(child_to_namespace));
-                let to_host = OwnedFd::new(child_to_host);
-                inside().expect("really should work out how to pass this");
-                Ok(())
-            })
-            .spawn()?
-    };
+    {
+        use nix::unistd::*;
+        match fork()? {
+            ForkResult::Parent { child } => {
+                nix::sys::wait::waitpid(child, None)?;
+            }
+            ForkResult::Child => {
+                inside(&root).expect("child setup");
+
+                match fork()? {
+                    ForkResult::Parent { child } => {
+                        println!("inner fork: {:?}", child);
+                        process::exit(69);
+                    }
+
+                    ForkResult::Child => {
+                        println!("inner child actually: {:?}", getpid());
+                        let sh = CString::new("/bin/dash")?;
+                        execv(&sh.clone(), &[sh])?;
+                    }
+                }
+            }
+        };
+    }
+
+    process::exit(72);
+    unimplemented!();
 
     close_stdin()?;
     mem::drop(to_host);
@@ -59,7 +74,7 @@ pub fn prepare(distro: &str) -> Result<process::Child, Error> {
 
     mem::drop(to_namespace);
 
-    Ok(child)
+    Ok(unimplemented!())
 }
 
 /// Super dodgy reopen here; should re-do freopen?
@@ -80,11 +95,9 @@ fn close_stdin() -> Result<(), Error> {
     Ok(())
 }
 
-fn inside() -> Result<(), Error> {
+fn inside(root: &str) -> Result<(), Error> {
     let real_euid = nix::unistd::geteuid();
     let real_egid = nix::unistd::getegid();
-
-    let root = env::current_dir()?;
 
     {
         use nix::sched::*;
@@ -111,14 +124,14 @@ fn inside() -> Result<(), Error> {
         )?;
 
         mount(
-            Some(&root),
-            &root,
+            Some(root),
+            root,
             unset,
             MsFlags::MS_BIND | MsFlags::MS_NOSUID,
             unset,
         )?;
 
-        env::set_current_dir(&root)?;
+        env::set_current_dir(root)?;
 
         mount(
             Some("/proc"),
