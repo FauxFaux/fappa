@@ -6,11 +6,14 @@ use std::mem;
 use std::net::Ipv6Addr;
 use std::os::unix::io::RawFd;
 use std::os::unix::process::CommandExt;
+use std::path;
 use std::process;
 
 use failure::err_msg;
 use failure::Error;
 use failure::ResultExt;
+use nix::unistd::Gid;
+use nix::unistd::Uid;
 use rand::Rng;
 
 pub fn prepare(distro: &str) -> Result<process::Child, Error> {
@@ -29,8 +32,11 @@ pub fn prepare(distro: &str) -> Result<process::Child, Error> {
 
     let root = format!("{}/root", distro);
 
-    fs::create_dir(&root)?;
-    crate::unpack::unpack(&format!("{}/amd64-root.tar.gz", distro), &root)?;
+    // TODO: do we need to do this unconditionally?
+    if !path::Path::new(&root).is_dir() {
+        fs::create_dir(&root)?;
+        crate::unpack::unpack(&format!("{}/amd64-root.tar.gz", distro), &root)?;
+    }
 
     let child = {
         let child_to_host = to_host.fd;
@@ -78,6 +84,8 @@ fn inside() -> Result<(), Error> {
     let real_euid = nix::unistd::geteuid();
     let real_egid = nix::unistd::getegid();
 
+    let root = env::current_dir()?;
+
     {
         use nix::sched::*;
         unshare(
@@ -93,6 +101,25 @@ fn inside() -> Result<(), Error> {
     {
         let unset: Option<&str> = None;
         use nix::mount::*;
+
+        mount(
+            Some("none"),
+            "/",
+            unset,
+            MsFlags::MS_REC | MsFlags::MS_PRIVATE,
+            unset,
+        )?;
+
+        mount(
+            Some(&root),
+            &root,
+            unset,
+            MsFlags::MS_BIND | MsFlags::MS_NOSUID,
+            unset,
+        )?;
+
+        env::set_current_dir(&root)?;
+
         mount(
             Some("/proc"),
             "proc",
@@ -110,17 +137,24 @@ fn inside() -> Result<(), Error> {
         )?;
     }
 
-    drop_setgroups()?;
-
     fs::OpenOptions::new()
         .write(true)
         .open("/proc/self/uid_map")?
         .write_all(format!("0 {} 1", real_euid).as_bytes())?;
 
+    drop_setgroups()?;
+
     fs::OpenOptions::new()
         .write(true)
         .open("/proc/self/gid_map")?
         .write_all(format!("0 {} 1", real_egid).as_bytes())?;
+
+    nix::unistd::setresuid(Uid::from_raw(0), Uid::from_raw(0), Uid::from_raw(0))?;
+    nix::unistd::setresgid(Gid::from_raw(0), Gid::from_raw(0), Gid::from_raw(0))?;
+
+    fs::remove_dir("old")?;
+    fs::create_dir("old")?;
+    nix::unistd::pivot_root(&Some("."), &Some("old"))?;
 
     Ok(())
 }
