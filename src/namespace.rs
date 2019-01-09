@@ -1,9 +1,11 @@
 use std::env;
 use std::fs;
 use std::io;
+use std::io::Read;
 use std::io::Write;
 use std::mem;
 use std::net::Ipv6Addr;
+use std::os::unix::io::FromRawFd;
 use std::os::unix::io::RawFd;
 use std::os::unix::process::CommandExt;
 use std::path;
@@ -18,19 +20,6 @@ use rand::Rng;
 use std::ffi::CString;
 
 pub fn prepare(distro: &str) -> Result<process::Child, Error> {
-    use nix::sys::socket::*;
-
-    let (to_namespace, to_host) = socketpair(
-        AddressFamily::Unix,
-        SockType::Datagram,
-        None,
-        SockFlag::empty(),
-    )
-    .with_context(|_| err_msg("creating socket pair"))?;
-
-    let to_namespace = OwnedFd::new(to_namespace);
-    let to_host = OwnedFd::new(to_host);
-
     let root = format!("{}/root", distro);
 
     // TODO: do we need to do this unconditionally?
@@ -39,14 +28,32 @@ pub fn prepare(distro: &str) -> Result<process::Child, Error> {
         crate::unpack::unpack(&format!("{}/amd64-root.tar.gz", distro), &root)?;
     }
 
-    {
+    let (from_recv, from_send) = nix::unistd::pipe()?;
+    let (into_recv, into_send) = nix::unistd::pipe()?;
+
+    let from_recv = OwnedFd::new(from_recv);
+    let from_send = OwnedFd::new(from_send);
+    let into_recv = OwnedFd::new(into_recv);
+    let into_send = OwnedFd::new(into_send);
+
+    let first_fork = {
         use nix::unistd::*;
         match fork()? {
-            ForkResult::Parent { child } => {
-                nix::sys::wait::waitpid(child, None)?;
-            }
+            ForkResult::Parent { child } => child,
             ForkResult::Child => {
+                drop(from_recv);
+                drop(into_send);
+
+                close_stdin()?;
+
+                let mut send = unsafe { os_pipe::PipeWriter::from_raw_fd(from_send.into_inner()) };
+                let recv = unsafe { os_pipe::PipeReader::from_raw_fd(into_recv.into_inner()) };
+
+                send.write_all(&[0x01]).expect("write");
+
                 inside(&root).expect("child setup");
+
+                send.write_all(&[0x02]).expect("write");
 
                 match fork()? {
                     ForkResult::Parent { child } => {
@@ -55,24 +62,27 @@ pub fn prepare(distro: &str) -> Result<process::Child, Error> {
                     }
 
                     ForkResult::Child => {
+                        send.write_all(&[0x03]).expect("write");
                         println!("inner child actually: {:?}", getpid());
                         let sh = CString::new("/bin/dash")?;
-                        execv(&sh.clone(), &[sh])?;
+                        send.write_all(&[0x04]).expect("write");
+                        execv(&sh.clone(), &[sh]).expect("exec");
+                        process::exit(71);
                     }
                 }
             }
-        };
-    }
+        }
+    };
 
-    process::exit(72);
-    unimplemented!();
+    drop(into_recv);
+    drop(from_send);
 
-    close_stdin()?;
-    mem::drop(to_host);
+    let mut send = unsafe { os_pipe::PipeWriter::from_raw_fd(into_send.into_inner()) };
+    let mut recv = unsafe { os_pipe::PipeReader::from_raw_fd(from_recv.into_inner()) };
 
-    // .. child actually sends something...
-
-    mem::drop(to_namespace);
+    let mut buf = [0u8; 4];
+    recv.read_exact(&mut buf)?;
+    println!("{:?}", buf);
 
     Ok(unimplemented!())
 }
@@ -88,7 +98,7 @@ fn close_stdin() -> Result<(), Error> {
         open(
             "/dev/null",
             OFlag::O_RDONLY | OFlag::O_CLOEXEC,
-            nix::sys::stat::Mode::S_IRUSR,
+            nix::sys::stat::Mode::empty(),
         )?
     );
 
@@ -205,6 +215,13 @@ impl OwnedFd {
         nix::unistd::close(self.fd)?;
         self.fd = -1;
         Ok(())
+    }
+
+    fn into_inner(mut self) -> RawFd {
+        let tmp = self.fd;
+        // stop us from dropping ourselves. :|
+        self.fd = -1;
+        tmp
     }
 }
 
