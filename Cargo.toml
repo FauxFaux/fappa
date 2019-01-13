@@ -6,8 +6,9 @@ authors = ["Chris West (Faux) <git@goeswhere.com>"]
 edition = "2018"
 
 [dependencies]
-byteorder = "1"
 async-fetcher = "0.1"
+byteorder = "1"
+cast = "0.2"
 clap = "2.32"
 failure = "0.1"
 fs_extra = "1"

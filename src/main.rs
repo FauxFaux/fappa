@@ -141,7 +141,12 @@ fn main() -> Result<(), Error> {
             }
         }
         ("namespace", _) => {
-            println!("{:?}", namespace::prepare("cosmic")?.wait());
+            let mut child = namespace::prepare("cosmic")?;
+            while let Some(event) = child.msg()? {
+                match event {
+                    namespace::FromChild::Debug(m) => println!("child says: {}", m),
+                }
+            }
         }
         ("null", _) => {
             println!();
