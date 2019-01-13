@@ -28,13 +28,17 @@ pub fn prepare(distro: &str) -> Result<process::Child, Error> {
         crate::unpack::unpack(&format!("{}/amd64-root.tar.gz", distro), &root)?;
     }
 
-    let (from_recv, from_send) = nix::unistd::pipe()?;
-    let (into_recv, into_send) = nix::unistd::pipe()?;
+    let (mut from_recv, mut from_send) = os_pipe::pipe()?;
+    let (mut into_recv, mut into_send) = os_pipe::pipe()?;
 
-    let from_recv = OwnedFd::new(from_recv);
-    let from_send = OwnedFd::new(from_send);
-    let into_recv = OwnedFd::new(into_recv);
-    let into_send = OwnedFd::new(into_send);
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let finit_host = format!("{}/bin/finit", root);
+        fs::write(&finit_host, &include_bytes!("../target/debug/finit")[..])?;
+        let mut initial = fs::File::open(&finit_host)?.metadata()?.permissions();
+        initial.set_mode(0o755);
+        fs::set_permissions(&finit_host, initial)?;
+    }
 
     let first_fork = {
         use nix::unistd::*;
@@ -46,14 +50,11 @@ pub fn prepare(distro: &str) -> Result<process::Child, Error> {
 
                 close_stdin()?;
 
-                let mut send = unsafe { os_pipe::PipeWriter::from_raw_fd(from_send.into_inner()) };
-                let recv = unsafe { os_pipe::PipeReader::from_raw_fd(into_recv.into_inner()) };
-
-                send.write_all(&[0x01]).expect("write");
+                from_send.write_all(&[0x01]).expect("write");
 
                 inside(&root).expect("child setup");
 
-                send.write_all(&[0x02]).expect("write");
+                from_send.write_all(&[0x02]).expect("write");
 
                 match fork()? {
                     ForkResult::Parent { child } => {
@@ -62,10 +63,11 @@ pub fn prepare(distro: &str) -> Result<process::Child, Error> {
                     }
 
                     ForkResult::Child => {
-                        send.write_all(&[0x03]).expect("write");
+                        from_send.write_all(&[0x03]).expect("write");
                         println!("inner child actually: {:?}", getpid());
-                        let sh = CString::new("/bin/dash")?;
-                        send.write_all(&[0x04]).expect("write");
+                        let sh = CString::new("/bin/finit")?;
+                        from_send.write_all(&[0x04]).expect("write");
+                        std::thread::sleep(std::time::Duration::from_millis(1000));
                         execv(&sh.clone(), &[sh]).expect("exec");
                         process::exit(71);
                     }
@@ -77,11 +79,8 @@ pub fn prepare(distro: &str) -> Result<process::Child, Error> {
     drop(into_recv);
     drop(from_send);
 
-    let mut send = unsafe { os_pipe::PipeWriter::from_raw_fd(into_send.into_inner()) };
-    let mut recv = unsafe { os_pipe::PipeReader::from_raw_fd(from_recv.into_inner()) };
-
     let mut buf = [0u8; 4];
-    recv.read_exact(&mut buf)?;
+    from_recv.read_exact(&mut buf)?;
     println!("{:?}", buf);
 
     Ok(unimplemented!())
