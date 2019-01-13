@@ -21,12 +21,7 @@ mod namespace;
 mod specs;
 mod unpack;
 
-use std::fs;
-use std::io;
-use std::io::Write;
-
 use failure::Error;
-use tempfile::TempDir;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Release {
@@ -95,83 +90,18 @@ impl Release {
     }
 }
 
-fn build_template(docker: (), release: Release) -> Result<(), Error> {
-    let dir = tempfile::TempDir::new()?;
+fn build_template(release: Release) -> Result<(), Error> {
     let from = format!("{}:{}", release.distro(), release.codename());
 
     {
-        let mut dockerfile = dir.path().to_path_buf();
-        dockerfile.push("Dockerfile");
-        let mut dockerfile = fs::File::create(dockerfile)?;
-
         include_str!("prepare-image.Dockerfile.hbs");
         &json!({
             "from": from,
             "locales": if release.locales_all() { "locales-all" } else { "locales" },
         });
-
-        for (file, content) in &[
-            (
-                "drop-privs-harder.c",
-                &include_bytes!("../security-tools/drop-privs-harder.c")[..],
-            ),
-            (
-                "drop-all-caps.c",
-                &include_bytes!("../security-tools/drop-all-caps.c")[..],
-            ),
-            (
-                "all-caps.h",
-                &include_bytes!("../security-tools/all-caps.h")[..],
-            ),
-        ] {
-            let mut new_file = dir.path().to_path_buf();
-            new_file.push(file);
-            fs::File::create(new_file)?.write_all(content)?;
-        }
-    }
-    let tag = format!("fappa-{}", release.codename());
-
-    dump_lines(
-        release,
-        unimplemented!(
-            r"
-        &docker.images().build(
-            &BuildOptions::builder(tempdir_as_bad_str(&dir)?)
-                .tag(tag)
-                .build(),
-        )?"
-        ),
-    )?;
-
-    Ok(())
-}
-
-fn dump_lines(release: Release, lines: &[serde_json::Value]) -> Result<Option<String>, Error> {
-    let mut last_id = None;
-
-    for line in lines {
-        let line = line
-            .as_object()
-            .ok_or_else(|| format_err!("unexpected line: {:?}", line))?;
-        if let Some(msg) = line.get("stream").and_then(|stream| stream.as_str()) {
-            for line in msg.trim_end_matches('\n').split('\n') {
-                println!(
-                    "[{}] log: {}",
-                    release.codename(),
-                    line.replace(|c| u32::from(c) < 32, " ")
-                );
-            }
-        } else if let Some(aux) = line.get("aux").and_then(|aux| aux.as_object()) {
-            if let Some(id) = aux.get("ID").and_then(|id| id.as_str()) {
-                last_id = Some(id.to_string());
-            }
-            println!("[{}] aux: {:?}", release.codename(), aux)
-        } else {
-            bail!("unknown notification: {:?}", line);
-        }
     }
 
-    Ok(last_id)
+    unimplemented!("can't build");
 }
 
 fn main() -> Result<(), Error> {
@@ -188,18 +118,9 @@ fn main() -> Result<(), Error> {
         .get_matches();
 
     match matches.subcommand() {
-        ("build-images", Some(matches)) => {
-            if matches.is_present("pull") {
-                for release in &RELEASES {
-                    print!("Pulling {:?}..", release);
-                    io::stdout().flush()?;
-                    unimplemented!();
-                    println!(". done.");
-                }
-            }
-
+        ("build-images", _) => {
             for release in &RELEASES {
-                build_template((), *release)?;
+                build_template(*release)?;
             }
         }
         ("validate", _) => {
@@ -215,7 +136,7 @@ fn main() -> Result<(), Error> {
         ("build", _) => {
             for package in specs::load_from("specs")? {
                 for release in &RELEASES {
-                    build::build((), release, &package)?;
+                    build::build(release, &package)?;
                 }
             }
         }
@@ -232,6 +153,8 @@ fn main() -> Result<(), Error> {
                 .map(|r| r.codename())
                 .collect::<Vec<_>>();
             fetch_images::fetch_ubuntu(&ubuntu_codenames)?;
+
+            unimplemented!("fetch debian");
         }
         _ => unreachable!(),
     }

@@ -3,22 +3,14 @@ use std::fs;
 use std::io;
 use std::io::Read;
 use std::io::Write;
-use std::mem;
-use std::net::Ipv6Addr;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::io::AsRawFd;
-use std::os::unix::io::FromRawFd;
-use std::os::unix::io::RawFd;
-use std::os::unix::process::CommandExt;
 use std::path;
 use std::process;
 
 use failure::err_msg;
 use failure::Error;
 use failure::ResultExt;
-use nix::unistd::Gid;
-use nix::unistd::Uid;
-use rand::Rng;
 use std::ffi::CString;
 
 #[derive(Debug)]
@@ -47,8 +39,8 @@ pub fn prepare(distro: &str) -> Result<Child, Error> {
         crate::unpack::unpack(&format!("{}/amd64-root.tar.gz", distro), &root)?;
     }
 
-    let (mut from_recv, mut from_send) = os_pipe::pipe()?;
-    let (mut into_recv, mut into_send) = os_pipe::pipe()?;
+    let (mut from_recv, from_send) = os_pipe::pipe()?;
+    let (into_recv, into_send) = os_pipe::pipe()?;
 
     {
         use std::os::unix::fs::PermissionsExt;
@@ -108,7 +100,7 @@ fn close_stdin() -> Result<(), Error> {
 fn setup_namespace(
     root: &str,
     recv: os_pipe::PipeReader,
-    mut send: os_pipe::PipeWriter,
+    send: os_pipe::PipeWriter,
 ) -> Result<void::Void, Error> {
     use nix::unistd::*;
 
@@ -205,7 +197,7 @@ fn setup_namespace(
     fs::remove_dir("old").with_context(|_| err_msg("rm old"))?;
 
     match fork()? {
-        ForkResult::Parent { child } => {
+        ForkResult::Parent { child: _ } => {
             use nix::sys::wait::*;
             // Mmm, not sure this is useful or even helpful.
             process::exit(match wait()? {
@@ -224,10 +216,7 @@ fn setup_namespace(
     }
 }
 
-fn setup_pid_1(
-    recv: os_pipe::PipeReader,
-    mut send: os_pipe::PipeWriter,
-) -> Result<void::Void, Error> {
+fn setup_pid_1(recv: os_pipe::PipeReader, send: os_pipe::PipeWriter) -> Result<void::Void, Error> {
     use nix::unistd::*;
 
     println!("inner child actually: {:?}", getpid());
@@ -295,52 +284,4 @@ fn make_mount_destination(name: &'static str) -> Result<(), Error> {
         .with_context(|_| format_err!("creating {} before mounting on it", name))?;
     fs::set_permissions(name, fs::Permissions::from_mode(0o644))?;
     Ok(())
-}
-
-fn set_cloexec(fd: RawFd, on: bool) -> Result<(), Error> {
-    use nix::fcntl::*;
-    let mut current = OFlag::from_bits(fcntl(fd, FcntlArg::F_GETFL)?)
-        .ok_or_else(|| err_msg("unrecognised fcntl bits"))?;
-
-    if on {
-        current.insert(OFlag::O_CLOEXEC);
-    } else {
-        current.remove(OFlag::O_CLOEXEC);
-    }
-
-    fcntl(fd, FcntlArg::F_SETFL(current))?;
-
-    Ok(())
-}
-
-pub struct OwnedFd {
-    pub fd: RawFd,
-}
-
-impl OwnedFd {
-    pub fn new(fd: RawFd) -> Self {
-        OwnedFd { fd }
-    }
-
-    fn close(&mut self) -> Result<(), Error> {
-        if -1 == self.fd {
-            return Ok(());
-        }
-        nix::unistd::close(self.fd)?;
-        self.fd = -1;
-        Ok(())
-    }
-
-    fn into_inner(mut self) -> RawFd {
-        let tmp = self.fd;
-        // stop us from dropping ourselves. :|
-        self.fd = -1;
-        tmp
-    }
-}
-
-impl Drop for OwnedFd {
-    fn drop(&mut self) {
-        self.close().expect("closing during drop")
-    }
 }

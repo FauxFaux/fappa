@@ -26,7 +26,7 @@ impl From<u64> for Kind {
     }
 }
 
-pub fn build(docker: (), release: &Release, package: &Package) -> Result<(), Error> {
+pub fn build(release: &Release, package: &Package) -> Result<(), Error> {
     let dir = tempfile::TempDir::new()?;
     {
         let mut dockerfile = dir.path().to_path_buf();
@@ -87,7 +87,7 @@ pub fn build(docker: (), release: &Release, package: &Package) -> Result<(), Err
         }
     }
 
-    let id: String = unimplemented!(
+    unimplemented!(
         r"crate::dump_lines(
         *release,
         &docker.images().build(
@@ -96,10 +96,6 @@ pub fn build(docker: (), release: &Release, package: &Package) -> Result<(), Err
         )?,
     )?"
     );
-
-    println!("starting install container {}", id);
-    let created = unimplemented!("containers.get(&id).start().wait()");
-    println!("done!");
 
     let mut new: Vec<String> = Vec::new();
     let mut rm: Vec<String> = Vec::new();
