@@ -219,7 +219,10 @@ fn setup_namespace(
 fn setup_pid_1(recv: os_pipe::PipeReader, send: os_pipe::PipeWriter) -> Result<void::Void, Error> {
     use nix::unistd::*;
 
-    println!("inner child actually: {:?}", getpid());
+    {
+        let us = getpid().as_raw();
+        ensure!(1 == us, "we failed to actually end up as pid 1: {}", us);
+    }
 
     {
         let unset: Option<&str> = None;
@@ -249,6 +252,8 @@ fn setup_pid_1(recv: os_pipe::PipeReader, send: os_pipe::PipeWriter) -> Result<v
         .with_context(|_| err_msg("finalising /"))?;
     }
 
+    drop_caps()?;
+
     let recv = dup(recv.as_raw_fd())?;
     let send = dup(send.as_raw_fd())?;
 
@@ -276,6 +281,21 @@ fn drop_setgroups() -> Result<(), Error> {
         }
         Err(e) => Err(e).with_context(|_| err_msg("unknown error opening setgroups"))?,
     }
+}
+
+fn drop_caps() -> Result<(), Error> {
+    let max_cap: libc::c_int = fs::read_to_string("/proc/sys/kernel/cap_last_cap")?
+        .trim()
+        .parse()?;
+    ensure!(max_cap > 0, "negative cap? {}", max_cap);
+    for cap in 0..=max_cap {
+        match unsafe { libc::prctl(libc::PR_CAPBSET_DROP, cap, 0, 0, 0) } {
+            0 | libc::EINVAL => (),
+            e => Err(nix::errno::Errno::from_i32(e))?,
+        }
+    }
+
+    Ok(())
 }
 
 fn make_mount_destination(name: &'static str) -> Result<(), Error> {
