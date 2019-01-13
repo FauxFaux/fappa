@@ -284,10 +284,33 @@ fn drop_setgroups() -> Result<(), Error> {
 }
 
 fn drop_caps() -> Result<(), Error> {
+    // man:capabilities(7)
+    //
+    // An  application  can use the following call to lock
+    // itself, and all of its descendants, into  an  envi‐
+    // ronment  where the only way of gaining capabilities
+    // is by executing  a  program  with  associated  file
+    // capabilities:
+    //
+    //     prctl(PR_SET_SECUREBITS,
+    //          /* SECBIT_KEEP_CAPS off */
+    //             SECBIT_KEEP_CAPS_LOCKED |
+    //             SECBIT_NO_SETUID_FIXUP |
+    //             SECBIT_NO_SETUID_FIXUP_LOCKED |
+    //             SECBIT_NOROOT |
+    //             SECBIT_NOROOT_LOCKED);
+    //             /* Setting/locking SECBIT_NO_CAP_AMBIENT_RAISE
+    //                is not required */
+    //
+    // 0x2f == that value, which isn't currently exposed by libc::.
+    unsafe { libc::prctl(libc::PR_SET_SECUREBITS, 0x2f, 0, 0, 0) };
+
     let max_cap: libc::c_int = fs::read_to_string("/proc/sys/kernel/cap_last_cap")?
         .trim()
         .parse()?;
+
     ensure!(max_cap > 0, "negative cap? {}", max_cap);
+
     for cap in 0..=max_cap {
         match unsafe { libc::prctl(libc::PR_CAPBSET_DROP, cap, 0, 0, 0) } {
             0 | libc::EINVAL => (),
