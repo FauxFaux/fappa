@@ -184,6 +184,7 @@ fn main() -> Result<(), Error> {
         .subcommand(SubCommand::with_name("build"))
         .subcommand(SubCommand::with_name("namespace"))
         .subcommand(SubCommand::with_name("fetch"))
+        .subcommand(SubCommand::with_name("null"))
         .get_matches();
 
     match matches.subcommand() {
@@ -219,7 +220,10 @@ fn main() -> Result<(), Error> {
             }
         }
         ("namespace", _) => {
-            println!("{:?}", namespace::prepare("cosmic")?.wait()?.code());
+            println!("{:?}", namespace::prepare("cosmic")?.wait());
+        }
+        ("null", _) => {
+            println!();
         }
         ("fetch", _) => {
             let ubuntu_codenames = RELEASES

@@ -21,7 +21,24 @@ use nix::unistd::Uid;
 use rand::Rng;
 use std::ffi::CString;
 
-pub fn prepare(distro: &str) -> Result<process::Child, Error> {
+#[derive(Debug)]
+pub struct Child {
+    send: os_pipe::PipeWriter,
+    recv: os_pipe::PipeReader,
+    pid: nix::unistd::Pid,
+}
+
+impl Child {
+    pub fn wait(self) -> Result<i32, Error> {
+        use nix::sys::wait::*;
+        match waitpid(self.pid, None)? {
+            WaitStatus::Exited(_, status) => Ok(status),
+            status => Err(format_err!("{:?}", status)),
+        }
+    }
+}
+
+pub fn prepare(distro: &str) -> Result<Child, Error> {
     let root = format!("{}/root", distro);
 
     // TODO: do we need to do this unconditionally?
@@ -37,9 +54,7 @@ pub fn prepare(distro: &str) -> Result<process::Child, Error> {
         use std::os::unix::fs::PermissionsExt;
         let finit_host = format!("{}/bin/finit", root);
         fs::write(&finit_host, &include_bytes!("../target/debug/finit")[..])?;
-        let mut initial = fs::File::open(&finit_host)?.metadata()?.permissions();
-        initial.set_mode(0o755);
-        fs::set_permissions(&finit_host, initial)?;
+        fs::set_permissions(&finit_host, fs::Permissions::from_mode(0o755))?;
     }
 
     let first_fork = {
@@ -59,11 +74,17 @@ pub fn prepare(distro: &str) -> Result<process::Child, Error> {
     drop(into_recv);
     drop(from_send);
 
-    let mut buf = [0u8; 4];
-    from_recv.read_exact(&mut buf)?;
+    let mut buf = [0u8; 16];
+    from_recv
+        .read_exact(&mut buf)
+        .with_context(|_| err_msg("reading message header"))?;
     println!("{:?}", buf);
 
-    Ok(unimplemented!())
+    Ok(Child {
+        recv: from_recv,
+        send: into_send,
+        pid: first_fork,
+    })
 }
 
 /// Super dodgy reopen here; should re-do freopen?
@@ -92,8 +113,6 @@ fn setup_namespace(
     use nix::unistd::*;
 
     close_stdin()?;
-
-    send.write_all(&[0x01])?;
 
     let real_euid = geteuid();
     let real_egid = getegid();
@@ -187,8 +206,12 @@ fn setup_namespace(
 
     match fork()? {
         ForkResult::Parent { child } => {
-            println!("inner fork: {:?}", child);
-            process::exit(69);
+            use nix::sys::wait::*;
+            // Mmm, not sure this is useful or even helpful.
+            process::exit(match wait()? {
+                WaitStatus::Exited(_, code) => code,
+                _ => 66,
+            });
         }
 
         ForkResult::Child => match setup_pid_1(recv, send) {
@@ -237,13 +260,15 @@ fn setup_pid_1(
         .with_context(|_| err_msg("finalising /"))?;
     }
 
-    let proc = CString::new("/bin/finit")?;
+    let recv = dup(recv.as_raw_fd())?;
+    let send = dup(send.as_raw_fd())?;
 
-    set_cloexec(send.as_raw_fd(), false)?;
-    set_cloexec(recv.as_raw_fd(), false)?;
-    dup(send.as_raw_fd())?;
-    dup(recv.as_raw_fd())?;
-    void::unreachable(execv(&proc.clone(), &[proc]).with_context(|_| err_msg("exec finit"))?);
+    let proc = CString::new("/bin/finit")?;
+    let argv0 = proc.clone();
+    let recv = CString::new(format!("{}", recv))?;
+    let send = CString::new(format!("{}", send))?;
+
+    void::unreachable(execv(&proc, &[argv0, recv, send]).with_context(|_| err_msg("exec finit"))?);
 }
 
 fn drop_setgroups() -> Result<(), Error> {
