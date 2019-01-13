@@ -60,9 +60,7 @@ pub fn fetch_ubuntu(distros: &[&str]) -> Result<(), Error> {
 
     let mut runtime = tokio::runtime::Runtime::new()?;
 
-    runtime
-        .block_on(s.into_future())
-        .map_err(|(fetch, _todo)| fetch)?;
+    runtime.block_on(s.collect())?;
 
     runtime
         .shutdown_now()

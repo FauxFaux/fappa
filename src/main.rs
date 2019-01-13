@@ -105,6 +105,8 @@ fn build_template(release: Release) -> Result<(), Error> {
 }
 
 fn main() -> Result<(), Error> {
+    pretty_env_logger::init();
+
     use clap::Arg;
     use clap::SubCommand;
     let matches = clap::App::new("fappa")
