@@ -26,6 +26,7 @@ tokio = "0.1"
 toml = "0.4"
 url = "1"
 walkdir = "2"
+void = "1"
 
 [dependencies.flate2]
 default-features = false

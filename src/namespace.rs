@@ -5,6 +5,7 @@ use std::io::Read;
 use std::io::Write;
 use std::mem;
 use std::net::Ipv6Addr;
+use std::os::unix::fs::PermissionsExt;
 use std::os::unix::io::FromRawFd;
 use std::os::unix::io::RawFd;
 use std::os::unix::process::CommandExt;
@@ -44,35 +45,13 @@ pub fn prepare(distro: &str) -> Result<process::Child, Error> {
         use nix::unistd::*;
         match fork()? {
             ForkResult::Parent { child } => child,
-            ForkResult::Child => {
-                drop(from_recv);
-                drop(into_send);
-
-                close_stdin()?;
-
-                from_send.write_all(&[0x01]).expect("write");
-
-                inside(&root).expect("child setup");
-
-                from_send.write_all(&[0x02]).expect("write");
-
-                match fork()? {
-                    ForkResult::Parent { child } => {
-                        println!("inner fork: {:?}", child);
-                        process::exit(69);
-                    }
-
-                    ForkResult::Child => {
-                        from_send.write_all(&[0x03]).expect("write");
-                        println!("inner child actually: {:?}", getpid());
-                        let sh = CString::new("/bin/finit")?;
-                        from_send.write_all(&[0x04]).expect("write");
-                        std::thread::sleep(std::time::Duration::from_millis(1000));
-                        execv(&sh.clone(), &[sh]).expect("exec");
-                        process::exit(71);
-                    }
+            ForkResult::Child => match setup_namespace(&root, into_recv, from_send) {
+                Ok(v) => void::unreachable(v),
+                Err(e) => {
+                    eprintln!("sandbox setup failed: {:?}", e);
+                    process::exit(67);
                 }
-            }
+            },
         }
     };
 
@@ -104,9 +83,19 @@ fn close_stdin() -> Result<(), Error> {
     Ok(())
 }
 
-fn inside(root: &str) -> Result<(), Error> {
-    let real_euid = nix::unistd::geteuid();
-    let real_egid = nix::unistd::getegid();
+fn setup_namespace(
+    root: &str,
+    recv: os_pipe::PipeReader,
+    mut send: os_pipe::PipeWriter,
+) -> Result<void::Void, Error> {
+    use nix::unistd::*;
+
+    close_stdin()?;
+
+    send.write_all(&[0x01])?;
+
+    let real_euid = geteuid();
+    let real_egid = getegid();
 
     {
         use nix::sched::*;
@@ -130,25 +119,33 @@ fn inside(root: &str) -> Result<(), Error> {
             unset,
             MsFlags::MS_REC | MsFlags::MS_PRIVATE,
             unset,
-        )?;
+        )
+        .with_context(|_| err_msg("mount --make-rprivate"))?;
 
+        // mount our unpacked root on itself, inside the new namespace
         mount(
             Some(root),
             root,
             unset,
             MsFlags::MS_BIND | MsFlags::MS_NOSUID,
             unset,
-        )?;
+        )
+        .with_context(|_| err_msg("mount $root $root"))?;
 
         env::set_current_dir(root)?;
 
+        // make /proc visible inside the chroot.
+        // without this, `mount -t proc proc /proc` fails with EPERM.
+        // No, I don't know where this is documented.
+        make_mount_destination(".host-proc")?;
         mount(
             Some("/proc"),
-            "proc",
+            ".host-proc",
             unset,
             MsFlags::MS_BIND | MsFlags::MS_REC,
             unset,
-        )?;
+        )
+        .with_context(|_| err_msg("mount --bind /proc .host-proc"))?;
 
         mount(
             Some("/sys"),
@@ -156,29 +153,87 @@ fn inside(root: &str) -> Result<(), Error> {
             unset,
             MsFlags::MS_BIND | MsFlags::MS_REC,
             unset,
-        )?;
+        )
+        .with_context(|_| err_msg("mount --bind /sys sys"))?;
     }
 
     fs::OpenOptions::new()
         .write(true)
-        .open("/proc/self/uid_map")?
-        .write_all(format!("0 {} 1", real_euid).as_bytes())?;
+        .open("/proc/self/uid_map")
+        .with_context(|_| err_msg("host uid_map"))?
+        .write_all(format!("0 {} 1", real_euid).as_bytes())
+        .with_context(|_| err_msg("writing uid_map"))?;
 
-    drop_setgroups()?;
+    drop_setgroups().with_context(|_| err_msg("drop_setgroups"))?;
 
     fs::OpenOptions::new()
         .write(true)
-        .open("/proc/self/gid_map")?
-        .write_all(format!("0 {} 1", real_egid).as_bytes())?;
+        .open("/proc/self/gid_map")
+        .with_context(|_| err_msg("host gid_map"))?
+        .write_all(format!("0 {} 1", real_egid).as_bytes())
+        .with_context(|_| err_msg("writing gid_map"))?;
 
-    nix::unistd::setresuid(Uid::from_raw(0), Uid::from_raw(0), Uid::from_raw(0))?;
-    nix::unistd::setresgid(Gid::from_raw(0), Gid::from_raw(0), Gid::from_raw(0))?;
+    setresuid(Uid::from_raw(0), Uid::from_raw(0), Uid::from_raw(0))
+        .with_context(|_| err_msg("setuid"))?;
+    setresgid(Gid::from_raw(0), Gid::from_raw(0), Gid::from_raw(0))
+        .with_context(|_| err_msg("setgid"))?;
 
-    fs::remove_dir("old")?;
-    fs::create_dir("old")?;
-    nix::unistd::pivot_root(&Some("."), &Some("old"))?;
+    make_mount_destination("old")?;
+    pivot_root(&Some("."), &Some("old")).with_context(|_| err_msg("pivot_root"))?;
+    nix::mount::umount2("old", nix::mount::MntFlags::MNT_DETACH)
+        .with_context(|_| err_msg("unmount old"))?;
+    fs::remove_dir("old").with_context(|_| err_msg("rm old"))?;
 
-    Ok(())
+    match fork()? {
+        ForkResult::Parent { child } => {
+            println!("inner fork: {:?}", child);
+            process::exit(69);
+        }
+
+        ForkResult::Child => match setup_pid_1() {
+            Ok(v) => void::unreachable(v),
+            Err(e) => {
+                eprintln!("sandbox setup pid1 failed: {:?}", e);
+                process::exit(67);
+            }
+        },
+    }
+}
+
+fn setup_pid_1() -> Result<void::Void, Error> {
+    use nix::unistd::*;
+
+    println!("inner child actually: {:?}", getpid());
+
+    {
+        let unset: Option<&str> = None;
+        use nix::mount::*;
+
+        mount(
+            Some("/proc"),
+            "/proc",
+            Some("proc"),
+            MsFlags::MS_NOSUID,
+            unset,
+        )
+        .with_context(|_| err_msg("mount proc -t proc /proc"))?;
+
+        umount2(".host-proc", MntFlags::MNT_DETACH)
+            .with_context(|_| err_msg("unmount .host-proc"))?;
+
+        fs::remove_dir(".host-proc")?;
+
+        mount(
+            Some("/"),
+            "/",
+            unset,
+            MsFlags::MS_RDONLY | MsFlags::MS_BIND | MsFlags::MS_NOSUID | MsFlags::MS_REMOUNT,
+            unset,
+        ).with_context(|_| err_msg("finalising /"))?;
+    }
+
+    let proc = CString::new("/bin/finit")?;
+    void::unreachable(execv(&proc.clone(), &[proc]).with_context(|_| err_msg("exec finit"))?);
 }
 
 fn drop_setgroups() -> Result<(), Error> {
@@ -191,11 +246,20 @@ fn drop_setgroups() -> Result<(), Error> {
             Ok(())
         }
         Ok(mut file) => {
-            file.write_all(b"deny")?;
+            file.write_all(b"deny")
+                .with_context(|_| err_msg("writing setgroups"))?;
             Ok(())
         }
         Err(e) => Err(e).with_context(|_| err_msg("unknown error opening setgroups"))?,
     }
+}
+
+fn make_mount_destination(name: &'static str) -> Result<(), Error> {
+    let _ = fs::remove_dir(name);
+    fs::create_dir(name)
+        .with_context(|_| format_err!("creating {} before mounting on it", name))?;
+    fs::set_permissions(name, fs::Permissions::from_mode(0o644))?;
+    Ok(())
 }
 
 pub struct OwnedFd {
