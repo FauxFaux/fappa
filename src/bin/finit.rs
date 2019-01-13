@@ -1,3 +1,5 @@
+use std::fs;
+
 use failure::Error;
 use nix::unistd;
 
@@ -12,6 +14,11 @@ fn main() -> Result<(), Error> {
     eprintln!("hi from init!");
     for p in psutil::process::all()? {
         eprintln!("{} {:?}", p.pid, p.cmdline()?);
+    }
+
+    for f in fs::read_dir("/proc/self/fd")? {
+        let f = f?;
+        println!("{:?} - {:?}", f.file_name(), fs::read_link(f.path()));
     }
 
     Ok(())

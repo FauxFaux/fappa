@@ -6,6 +6,7 @@ use std::io::Write;
 use std::mem;
 use std::net::Ipv6Addr;
 use std::os::unix::fs::PermissionsExt;
+use std::os::unix::io::AsRawFd;
 use std::os::unix::io::FromRawFd;
 use std::os::unix::io::RawFd;
 use std::os::unix::process::CommandExt;
@@ -190,7 +191,7 @@ fn setup_namespace(
             process::exit(69);
         }
 
-        ForkResult::Child => match setup_pid_1() {
+        ForkResult::Child => match setup_pid_1(recv, send) {
             Ok(v) => void::unreachable(v),
             Err(e) => {
                 eprintln!("sandbox setup pid1 failed: {:?}", e);
@@ -200,7 +201,10 @@ fn setup_namespace(
     }
 }
 
-fn setup_pid_1() -> Result<void::Void, Error> {
+fn setup_pid_1(
+    recv: os_pipe::PipeReader,
+    mut send: os_pipe::PipeWriter,
+) -> Result<void::Void, Error> {
     use nix::unistd::*;
 
     println!("inner child actually: {:?}", getpid());
@@ -229,10 +233,16 @@ fn setup_pid_1() -> Result<void::Void, Error> {
             unset,
             MsFlags::MS_RDONLY | MsFlags::MS_BIND | MsFlags::MS_NOSUID | MsFlags::MS_REMOUNT,
             unset,
-        ).with_context(|_| err_msg("finalising /"))?;
+        )
+        .with_context(|_| err_msg("finalising /"))?;
     }
 
     let proc = CString::new("/bin/finit")?;
+
+    set_cloexec(send.as_raw_fd(), false)?;
+    set_cloexec(recv.as_raw_fd(), false)?;
+    dup(send.as_raw_fd())?;
+    dup(recv.as_raw_fd())?;
     void::unreachable(execv(&proc.clone(), &[proc]).with_context(|_| err_msg("exec finit"))?);
 }
 
@@ -259,6 +269,22 @@ fn make_mount_destination(name: &'static str) -> Result<(), Error> {
     fs::create_dir(name)
         .with_context(|_| format_err!("creating {} before mounting on it", name))?;
     fs::set_permissions(name, fs::Permissions::from_mode(0o644))?;
+    Ok(())
+}
+
+fn set_cloexec(fd: RawFd, on: bool) -> Result<(), Error> {
+    use nix::fcntl::*;
+    let mut current = OFlag::from_bits(fcntl(fd, FcntlArg::F_GETFL)?)
+        .ok_or_else(|| err_msg("unrecognised fcntl bits"))?;
+
+    if on {
+        current.insert(OFlag::O_CLOEXEC);
+    } else {
+        current.remove(OFlag::O_CLOEXEC);
+    }
+
+    fcntl(fd, FcntlArg::F_SETFL(current))?;
+
     Ok(())
 }
 
