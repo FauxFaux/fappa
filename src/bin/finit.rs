@@ -30,6 +30,23 @@ fn main() -> Result<(), Error> {
         send: unsafe { os_pipe::PipeWriter::from_raw_fd(send) },
     };
 
+    host.println("I'm alive, the init with the second face.")?;
+
+    match work(&mut host) {
+        Ok(()) => {
+            host.println("bye!")?;
+            host.write_msg(2, &[])?;
+            Ok(())
+        }
+        Err(e) => {
+            host.println(format!("failure: {:?}", e))?;
+            host.write_msg(3, &[])?;
+            Err(e)
+        }
+    }
+}
+
+fn work(host: &mut Host) -> Result<(), Error> {
     for p in psutil::process::all()? {
         host.println(format!("{} {:?}", p.pid, p.cmdline()?))?;
     }
@@ -43,7 +60,6 @@ fn main() -> Result<(), Error> {
         ))?;
     }
 
-    host.write_msg(2, &[])?;
     Ok(())
 }
 

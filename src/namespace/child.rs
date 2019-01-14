@@ -6,6 +6,7 @@ use byteorder::WriteBytesExt;
 use byteorder::LE;
 use cast::u64;
 use cast::usize;
+use failure::err_msg;
 use failure::Error;
 
 #[derive(Debug)]
@@ -34,6 +35,7 @@ impl Child {
         let ret = match code {
             1 => FromChild::Debug(String::from_utf8(data)?),
             2 => return Ok(None),
+            3 => return Err(err_msg(String::from_utf8(data)?)),
             // TODO: should we tell the client to die here?
             code => bail!("unsupported client code: {}", code),
         };
