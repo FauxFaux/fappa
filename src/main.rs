@@ -143,12 +143,31 @@ fn main() -> Result<(), Error> {
             }
         }
         ("namespace", _) => {
+            use namespace::child::FromChild;
             let mut child = namespace::prepare("cosmic")?;
             while let Some(event) = child.msg()? {
                 match event {
-                    namespace::child::FromChild::Debug(m) => println!("child says: {}", m),
+                    FromChild::Ready => break,
+                    FromChild::Debug(m) => println!("child says: {}", m),
+                    _ => bail!("unexpected event: {:?}", event),
                 }
             }
+
+            child.write_msg(100, b"echo hello\n")?;
+
+            while let Some(event) = child.msg()? {
+                match event {
+                    FromChild::Debug(m) => println!("child says: {}", m),
+                    FromChild::Output(m) => println!("child printed: {:?}", String::from_utf8_lossy(&m)),
+                    FromChild::SubExited(c) => {
+                        println!("child exited: {}", c);
+                        break;
+                    },
+                    _ => bail!("unexpected event: {:?}", event),
+                }
+            }
+            child.write_msg(101, &[])?;
+            println!("{:?}", child.msg()?);
         }
         ("null", _) => {
             println!();

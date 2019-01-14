@@ -8,6 +8,7 @@ use cast::u64;
 use cast::usize;
 use failure::err_msg;
 use failure::Error;
+use failure::ResultExt;
 
 #[derive(Debug)]
 pub struct Child {
@@ -16,9 +17,16 @@ pub struct Child {
     pub pid: nix::unistd::Pid,
 }
 
+#[derive(Debug, Clone)]
 pub enum FromChild {
     // 1
     Debug(String),
+    // 4
+    Ready,
+    // 5
+    Output(Vec<u8>),
+    // 6
+    SubExited(u8),
 }
 
 impl Child {
@@ -32,28 +40,36 @@ impl Child {
 
     pub fn msg(&mut self) -> Result<Option<FromChild>, Error> {
         let (code, data) = self.read_msg()?;
-        let ret = match code {
-            1 => FromChild::Debug(String::from_utf8(data)?),
-            2 => return Ok(None),
-            3 => return Err(err_msg(String::from_utf8(data)?)),
+        match code {
+            1 => {
+                self.write_msg(0, &[])?;
+                Ok(Some(FromChild::Debug(String::from_utf8(data)?)))
+            }
+            2 => Ok(None),
+            3 => Err(err_msg(String::from_utf8(data)?)),
+            4 => Ok(Some(FromChild::Ready)),
+            5 => Ok(Some(FromChild::Output(data))),
+            6 => Ok(Some(FromChild::SubExited(data[0]))),
             // TODO: should we tell the client to die here?
             code => bail!("unsupported client code: {}", code),
-        };
-        self.write_msg(0, &[])?;
-        Ok(Some(ret))
+        }
     }
 
     fn read_msg(&mut self) -> Result<(u64, Vec<u8>), Error> {
         let mut buf = [0u8; 16];
-        self.recv.read_exact(&mut buf)?;
+        self.recv
+            .read_exact(&mut buf)
+            .with_context(|_| err_msg("reading header from child"))?;
         let len = LE::read_u64(&buf[..=8]);
         let code = LE::read_u64(&buf[8..]);
         let mut buf = vec![0u8; usize(len - 16)];
-        self.recv.read_exact(&mut buf)?;
+        self.recv
+            .read_exact(&mut buf)
+            .with_context(|_| format_err!("reading {}-16 bytes from child", len))?;
         Ok((code, buf))
     }
 
-    fn write_msg(&mut self, code: u64, data: &[u8]) -> Result<(), Error> {
+    pub fn write_msg(&mut self, code: u64, data: &[u8]) -> Result<(), Error> {
         let total = 16 + data.len();
         let mut msg = Vec::with_capacity(total);
         // header: length (including header), code

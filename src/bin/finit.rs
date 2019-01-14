@@ -4,6 +4,7 @@ use std::fs;
 use std::io::Read;
 use std::io::Write;
 use std::os::unix::io::FromRawFd;
+use std::process;
 
 use byteorder::ByteOrder;
 use byteorder::WriteBytesExt;
@@ -11,7 +12,9 @@ use byteorder::LE;
 use cast::u64;
 use cast::usize;
 use failure::bail;
+use failure::err_msg;
 use failure::Error;
+use failure::ResultExt;
 use nix::unistd;
 
 fn main() -> Result<(), Error> {
@@ -34,7 +37,6 @@ fn main() -> Result<(), Error> {
 
     match work(&mut host) {
         Ok(()) => {
-            host.println("bye!")?;
             host.write_msg(2, &[])?;
             Ok(())
         }
@@ -58,6 +60,70 @@ fn work(host: &mut Host) -> Result<(), Error> {
             f.file_name(),
             fs::read_link(f.path())
         ))?;
+    }
+
+    host.write_msg(4, &[])?;
+
+    loop {
+        let (code, data) = host.read_msg()?;
+        match code {
+            100 => run(host, data)?,
+            101 => return Ok(()),
+            _ => bail!("unsupported code: {}", code),
+        };
+    }
+}
+
+fn run(host: &mut Host, data: Vec<u8>) -> Result<(), Error> {
+    use std::os::unix::process::CommandExt;
+    let mut proc = process::Command::new("/bin/dash")
+                .arg("-c")
+                .arg("/bin/bash 2>&1 && sleep 0.02")
+//        .uid(1000)
+//        .gid(1000)
+        .stdin(process::Stdio::piped())
+        .stdout(process::Stdio::piped())
+        .stderr(process::Stdio::null())
+        .spawn()
+        .with_context(|_| err_msg("launching script runner"))?;
+
+    let driven = drive_child(host, &mut proc, &data);
+
+    let exit = proc
+        .wait()
+        .with_context(|_| err_msg("waiting for finished process"))?;
+
+    host.println(format!("child: {:?}: {:?}", exit, driven))?;
+
+    host.write_msg(6, &[exit.code().unwrap_or(255) as u8])?;
+
+    Ok(())
+}
+
+fn drive_child(host: &mut Host, proc: &mut process::Child, data: &[u8]) -> Result<(), Error> {
+    {
+        proc.stdin
+            .take()
+            .ok_or_else(|| err_msg("stdin requested"))?
+            .write_all(&data)
+            .with_context(|_| err_msg("sending script to shell"))?;
+    }
+
+    let stdout = proc
+        .stdout
+        .as_mut()
+        .ok_or_else(|| err_msg("stdout requested"))?;
+
+    use std::os::unix::io::AsRawFd;
+
+    loop {
+        let mut buf = [0u8; 1024 * 16];
+        let valid = stdout.read(&mut buf)?;
+        if 0 == valid {
+            break;
+        }
+
+        host.write_msg(5, &buf[..valid])?;
     }
 
     Ok(())

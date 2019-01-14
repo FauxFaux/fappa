@@ -54,20 +54,12 @@ pub fn prepare(distro: &str) -> Result<child::Child, Error> {
     })
 }
 
-/// Super dodgy reopen here; should re-do freopen?
-fn close_stdin() -> Result<(), Error> {
-    nix::unistd::close(0)?;
-
-    use nix::fcntl::*;
-    // Third argument ignored, as we're not creating the file.
-    assert_eq!(
+fn reopen_stdin_as_null() -> Result<(), Error> {
+    nix::unistd::dup3(
+        fs::File::open("/dev/null")?.as_raw_fd(),
         0,
-        open(
-            "/dev/null",
-            OFlag::O_RDONLY | OFlag::O_CLOEXEC,
-            nix::sys::stat::Mode::empty(),
-        )?
-    );
+        nix::fcntl::OFlag::empty(),
+    )?;
 
     Ok(())
 }
@@ -79,7 +71,7 @@ fn setup_namespace(
 ) -> Result<void::Void, Error> {
     use nix::unistd::*;
 
-    close_stdin()?;
+    reopen_stdin_as_null()?;
 
     let real_euid = geteuid();
     let real_egid = getegid();
@@ -142,6 +134,16 @@ fn setup_namespace(
             unset,
         )
         .with_context(|_| err_msg("mount --bind /sys sys"))?;
+
+        drop(fs::File::create("dev/null")?);
+        mount(
+            Some("/dev/null"),
+            "dev/null",
+            unset,
+            MsFlags::MS_BIND,
+            unset,
+        )
+        .with_context(|_| err_msg("mount --bind /dev/null"))?;
     }
 
     fs::OpenOptions::new()
