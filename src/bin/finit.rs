@@ -75,10 +75,9 @@ fn work(host: &mut Host) -> Result<(), Error> {
 }
 
 fn run(host: &mut Host, data: Vec<u8>) -> Result<(), Error> {
-    use std::os::unix::process::CommandExt;
     let mut proc = process::Command::new("/bin/dash")
                 .arg("-c")
-                .arg("/bin/bash 2>&1 && sleep 0.02")
+                .arg("/bin/bash 2>&1")
 //        .uid(1000)
 //        .gid(1000)
         .stdin(process::Stdio::piped())
@@ -113,8 +112,6 @@ fn drive_child(host: &mut Host, proc: &mut process::Child, data: &[u8]) -> Resul
         .stdout
         .as_mut()
         .ok_or_else(|| err_msg("stdout requested"))?;
-
-    use std::os::unix::io::AsRawFd;
 
     loop {
         let mut buf = [0u8; 1024 * 16];
