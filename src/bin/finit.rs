@@ -75,11 +75,13 @@ fn work(host: &mut Host) -> Result<(), Error> {
 }
 
 fn run(host: &mut Host, data: Vec<u8>) -> Result<(), Error> {
+    use std::os::unix::process::CommandExt;
+
     let mut proc = process::Command::new("/bin/dash")
                 .arg("-c")
                 .arg("/bin/bash 2>&1")
-//        .uid(1000)
-//        .gid(1000)
+        .uid(0)
+        .gid(0)
         .stdin(process::Stdio::piped())
         .stdout(process::Stdio::piped())
         .stderr(process::Stdio::null())

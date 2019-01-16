@@ -114,7 +114,8 @@ fn main() -> Result<(), Error> {
         .subcommand(SubCommand::with_name("build-images").arg(Arg::with_name("pull").long("pull")))
         .subcommand(SubCommand::with_name("validate"))
         .subcommand(SubCommand::with_name("build"))
-        .subcommand(SubCommand::with_name("namespace"))
+        .subcommand(SubCommand::with_name("namespace")
+            .arg(Arg::with_name("cmd").short("c").required(true).takes_value(true)))
         .subcommand(SubCommand::with_name("fetch"))
         .subcommand(SubCommand::with_name("null"))
         .get_matches();
@@ -142,7 +143,7 @@ fn main() -> Result<(), Error> {
                 }
             }
         }
-        ("namespace", _) => {
+        ("namespace", Some(matches)) => {
             use namespace::child::FromChild;
             let mut child = namespace::prepare("cosmic")?;
             while let Some(event) = child.msg()? {
@@ -153,7 +154,8 @@ fn main() -> Result<(), Error> {
                 }
             }
 
-            child.write_msg(100, b"echo hello\n")?;
+            use std::os::unix::ffi::OsStrExt;
+            child.write_msg(100, matches.value_of_os("cmd").unwrap().as_bytes())?;
 
             while let Some(event) = child.msg()? {
                 match event {

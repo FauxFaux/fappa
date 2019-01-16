@@ -223,7 +223,7 @@ fn setup_pid_1(recv: os_pipe::PipeReader, send: os_pipe::PipeWriter) -> Result<v
             Some("/"),
             "/",
             unset,
-            MsFlags::MS_RDONLY | MsFlags::MS_BIND | MsFlags::MS_NOSUID | MsFlags::MS_REMOUNT,
+            MsFlags::MS_BIND | MsFlags::MS_NOSUID | MsFlags::MS_REMOUNT,
             unset,
         )
         .with_context(|_| err_msg("finalising /"))?;
