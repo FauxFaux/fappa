@@ -1,6 +1,7 @@
 use std::env;
 use std::fs;
 use std::io;
+use std::io::Read;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::io::AsRawFd;
@@ -23,8 +24,8 @@ pub fn prepare(distro: &str) -> Result<child::Child, Error> {
         crate::unpack::unpack(&format!("{}/amd64-root.tar.gz", distro), &root)?;
     }
 
-    let (from_recv, from_send) = os_pipe::pipe()?;
-    let (into_recv, into_send) = os_pipe::pipe()?;
+    let (mut from_recv, from_send) = os_pipe::pipe()?;
+    let (into_recv, mut into_send) = os_pipe::pipe()?;
 
     {
         use std::os::unix::fs::PermissionsExt;
@@ -47,6 +48,30 @@ pub fn prepare(distro: &str) -> Result<child::Child, Error> {
         }
     };
 
+    from_recv.read(&mut vec![0u8; 1])?;
+
+    let real_euid = nix::unistd::geteuid();
+    let real_egid = nix::unistd::getegid();
+
+    // TODO: read 165536 from /etc/sub?id
+    #[rustfmt::skip]
+    ensure!(std::process::Command::new("newuidmap")
+        .args(&[&format!("{}", first_fork),
+            "0", &format!("{}", real_euid), "1",
+            "1", "165536", "65535"
+        ])
+        .status()?.success(), "setting up newuidmap for worker");
+
+    #[rustfmt::skip]
+    ensure!(std::process::Command::new("newgidmap")
+        .args(&[&format!("{}", first_fork),
+            "0", &format!("{}", real_egid), "1",
+            "1", "165536", "65535"
+        ])
+        .status()?.success(), "setting up newgidmap for worker");
+
+    into_send.write_all(b"a")?;
+
     Ok(child::Child {
         recv: from_recv,
         send: into_send,
@@ -66,15 +91,12 @@ fn reopen_stdin_as_null() -> Result<(), Error> {
 
 fn setup_namespace(
     root: &str,
-    recv: os_pipe::PipeReader,
-    send: os_pipe::PipeWriter,
+    mut recv: os_pipe::PipeReader,
+    mut send: os_pipe::PipeWriter,
 ) -> Result<void::Void, Error> {
     use nix::unistd::*;
 
     reopen_stdin_as_null()?;
-
-    let real_euid = geteuid();
-    let real_egid = getegid();
 
     {
         use nix::sched::*;
@@ -146,21 +168,15 @@ fn setup_namespace(
         .with_context(|_| err_msg("mount --bind /dev/null"))?;
     }
 
-    fs::OpenOptions::new()
-        .write(true)
-        .open("/proc/self/uid_map")
-        .with_context(|_| err_msg("host uid_map"))?
-        .write_all(format!("0 {} 1", real_euid).as_bytes())
-        .with_context(|_| err_msg("writing uid_map"))?;
+    {
+        send.write_all(b"1")?;
 
-    drop_setgroups().with_context(|_| err_msg("drop_setgroups"))?;
-
-    fs::OpenOptions::new()
-        .write(true)
-        .open("/proc/self/gid_map")
-        .with_context(|_| err_msg("host gid_map"))?
-        .write_all(format!("0 {} 1", real_egid).as_bytes())
-        .with_context(|_| err_msg("writing gid_map"))?;
+        let mut buf = [0u8; 1];
+        ensure!(
+            1 == recv.read(&mut buf)?,
+            "reading resume permission from host failed"
+        );
+    }
 
     setresuid(Uid::from_raw(0), Uid::from_raw(0), Uid::from_raw(0))
         .with_context(|_| err_msg("setuid"))?;
@@ -229,7 +245,7 @@ fn setup_pid_1(recv: os_pipe::PipeReader, send: os_pipe::PipeWriter) -> Result<v
         .with_context(|_| err_msg("finalising /"))?;
     }
 
-    drop_caps()?;
+    //    drop_caps()?;
 
     let recv = dup(recv.as_raw_fd())?;
     let send = dup(send.as_raw_fd())?;
@@ -240,24 +256,6 @@ fn setup_pid_1(recv: os_pipe::PipeReader, send: os_pipe::PipeWriter) -> Result<v
     let send = CString::new(format!("{}", send))?;
 
     void::unreachable(execv(&proc, &[argv0, recv, send]).with_context(|_| err_msg("exec finit"))?);
-}
-
-fn drop_setgroups() -> Result<(), Error> {
-    match fs::OpenOptions::new()
-        .write(true)
-        .open("/proc/self/setgroups")
-    {
-        Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
-            // Maybe the system doesn't care?
-            Ok(())
-        }
-        Ok(mut file) => {
-            file.write_all(b"deny")
-                .with_context(|_| err_msg("writing setgroups"))?;
-            Ok(())
-        }
-        Err(e) => Err(e).with_context(|_| err_msg("unknown error opening setgroups"))?,
-    }
 }
 
 fn drop_caps() -> Result<(), Error> {

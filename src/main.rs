@@ -114,8 +114,14 @@ fn main() -> Result<(), Error> {
         .subcommand(SubCommand::with_name("build-images").arg(Arg::with_name("pull").long("pull")))
         .subcommand(SubCommand::with_name("validate"))
         .subcommand(SubCommand::with_name("build"))
-        .subcommand(SubCommand::with_name("namespace")
-            .arg(Arg::with_name("cmd").short("c").required(true).takes_value(true)))
+        .subcommand(
+            SubCommand::with_name("namespace").arg(
+                Arg::with_name("cmd")
+                    .short("c")
+                    .required(true)
+                    .takes_value(true),
+            ),
+        )
         .subcommand(SubCommand::with_name("fetch"))
         .subcommand(SubCommand::with_name("null"))
         .get_matches();
@@ -160,11 +166,13 @@ fn main() -> Result<(), Error> {
             while let Some(event) = child.msg()? {
                 match event {
                     FromChild::Debug(m) => println!("child says: {}", m),
-                    FromChild::Output(m) => println!("child printed: {:?}", String::from_utf8_lossy(&m)),
+                    FromChild::Output(m) => {
+                        println!("child printed: {:?}", String::from_utf8_lossy(&m))
+                    }
                     FromChild::SubExited(c) => {
                         println!("child exited: {}", c);
                         break;
-                    },
+                    }
                     _ => bail!("unexpected event: {:?}", event),
                 }
             }
