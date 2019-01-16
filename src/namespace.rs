@@ -32,6 +32,10 @@ pub fn prepare(distro: &str) -> Result<child::Child, Error> {
         let finit_host = format!("{}/bin/finit", root);
         fs::write(&finit_host, &include_bytes!("../target/debug/finit")[..])?;
         fs::set_permissions(&finit_host, fs::Permissions::from_mode(0o755))?;
+        fs::write(
+            format!("{}/etc/resolv.conf", root),
+            b"nameserver 127.0.0.53",
+        )?;
     }
 
     let first_fork = {
