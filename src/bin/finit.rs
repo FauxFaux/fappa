@@ -3,7 +3,9 @@ use std::fmt::Display;
 use std::fs;
 use std::io::Read;
 use std::io::Write;
+use std::os::unix::io::AsRawFd;
 use std::os::unix::io::FromRawFd;
+use std::os::unix::io::RawFd;
 use std::process;
 
 use byteorder::ByteOrder;
@@ -13,6 +15,7 @@ use cast::u64;
 use cast::usize;
 use failure::bail;
 use failure::err_msg;
+use failure::format_err;
 use failure::Error;
 use failure::ResultExt;
 use nix::unistd;
@@ -33,6 +36,8 @@ fn main() -> Result<(), Error> {
         send: unsafe { os_pipe::PipeWriter::from_raw_fd(send) },
     };
 
+    close_fds_except(&mut host, &[0, 1, 2, recv, send]).with_context(|_| err_msg("closing fds"))?;
+
     host.println("I'm alive, the init with the second face.")?;
 
     match work(&mut host) {
@@ -51,15 +56,6 @@ fn main() -> Result<(), Error> {
 fn work(host: &mut Host) -> Result<(), Error> {
     for p in psutil::process::all()? {
         host.println(format!("{} {:?}", p.pid, p.cmdline()?))?;
-    }
-
-    for f in fs::read_dir("/proc/self/fd")? {
-        let f = f?;
-        host.println(format!(
-            "{:?} - {:?}",
-            f.file_name(),
-            fs::read_link(f.path())
-        ))?;
     }
 
     host.write_msg(4, &[])?;
@@ -124,6 +120,45 @@ fn drive_child(host: &mut Host, proc: &mut process::Child, data: &[u8]) -> Resul
 
         host.write_msg(5, &buf[..valid])?;
     }
+
+    Ok(())
+}
+
+fn close_fds_except(host: &mut Host, leave: &[RawFd]) -> Result<(), Error> {
+    let safety_block = 20;
+    for i in 0..=safety_block {
+        if leave.contains(&i) {
+            continue;
+        }
+        let _ = nix::unistd::close(i);
+    }
+
+    for f in fs::read_dir("/proc/self/fd")? {
+        let f = f?;
+        let desc = f
+            .file_name()
+            .to_str()
+            .ok_or_else(|| format_err!("bad fd content: {:?}", f.file_name()))?
+            .parse()?;
+
+        if desc < safety_block || leave.contains(&desc) {
+            continue;
+        }
+
+        host.println(format!(
+            "You leaked an fd! {:?} - {:?}",
+            f.file_name(),
+            fs::read_link(f.path())
+        ))?;
+
+        nix::unistd::close(desc)?;
+    }
+
+    nix::unistd::dup3(
+        fs::File::open("/dev/null")?.as_raw_fd(),
+        0,
+        nix::fcntl::OFlag::empty(),
+    )?;
 
     Ok(())
 }

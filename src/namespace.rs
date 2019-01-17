@@ -222,6 +222,13 @@ fn setup_pid_1(recv: os_pipe::PipeReader, send: os_pipe::PipeWriter) -> Result<v
     }
 
     {
+        let sticky_for_all = fs::Permissions::from_mode(0o1777);
+        fs::set_permissions("/tmp", sticky_for_all.clone())?;
+        fs::set_permissions("/var/tmp", sticky_for_all)?;
+        // TODO: dev/shm?
+    }
+
+    {
         let unset: Option<&str> = None;
         use nix::mount::*;
 
