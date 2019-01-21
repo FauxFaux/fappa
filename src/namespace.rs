@@ -1,6 +1,5 @@
 use std::env;
 use std::fs;
-use std::io;
 use std::io::Read;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
@@ -30,7 +29,7 @@ pub fn prepare(distro: &str) -> Result<child::Child, Error> {
     {
         use std::os::unix::fs::PermissionsExt;
         let finit_host = format!("{}/bin/finit", root);
-        fs::write(&finit_host, &include_bytes!("../target/debug/finit")[..])?;
+        reflink::reflink_or_copy("target/debug/finit", &finit_host)?;
         fs::set_permissions(&finit_host, fs::Permissions::from_mode(0o755))?;
         fs::write(
             format!("{}/etc/resolv.conf", root),
