@@ -115,12 +115,14 @@ fn main() -> Result<(), Error> {
         .subcommand(SubCommand::with_name("validate"))
         .subcommand(SubCommand::with_name("build"))
         .subcommand(
-            SubCommand::with_name("namespace").arg(
-                Arg::with_name("cmd")
-                    .short("c")
-                    .required(true)
-                    .takes_value(true),
-            ),
+            SubCommand::with_name("namespace")
+                .arg(
+                    Arg::with_name("cmd")
+                        .short("c")
+                        .required(true)
+                        .takes_value(true),
+                )
+                .arg(Arg::with_name("root").short("r")),
         )
         .subcommand(SubCommand::with_name("fetch"))
         .subcommand(SubCommand::with_name("null"))
@@ -161,7 +163,12 @@ fn main() -> Result<(), Error> {
             }
 
             use std::os::unix::ffi::OsStrExt;
-            child.write_msg(100, matches.value_of_os("cmd").unwrap().as_bytes())?;
+
+            let code = match matches.is_present("root") {
+                true => 102,
+                false => 100,
+            };
+            child.write_msg(code, matches.value_of_os("cmd").unwrap().as_bytes())?;
 
             while let Some(event) = child.msg()? {
                 match event {

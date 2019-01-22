@@ -186,6 +186,10 @@ fn setup_namespace(
     setresgid(Gid::from_raw(0), Gid::from_raw(0), Gid::from_raw(0))
         .with_context(|_| err_msg("setgid"))?;
 
+    setgroups(&[Gid::from_raw(0)])
+        .with_context(|_| err_msg("setgroups(0)"))?;
+
+
     make_mount_destination("old")?;
     pivot_root(&Some("."), &Some("old")).with_context(|_| err_msg("pivot_root"))?;
     nix::mount::umount2("old", nix::mount::MntFlags::MNT_DETACH)
@@ -255,8 +259,6 @@ fn setup_pid_1(recv: os_pipe::PipeReader, send: os_pipe::PipeWriter) -> Result<v
         .with_context(|_| err_msg("finalising /"))?;
     }
 
-    //    drop_caps()?;
-
     let recv = dup(recv.as_raw_fd())?;
     let send = dup(send.as_raw_fd())?;
 
@@ -266,44 +268,6 @@ fn setup_pid_1(recv: os_pipe::PipeReader, send: os_pipe::PipeWriter) -> Result<v
     let send = CString::new(format!("{}", send))?;
 
     void::unreachable(execv(&proc, &[argv0, recv, send]).with_context(|_| err_msg("exec finit"))?);
-}
-
-fn drop_caps() -> Result<(), Error> {
-    // man:capabilities(7)
-    //
-    // An  application  can use the following call to lock
-    // itself, and all of its descendants, into  an  envi‐
-    // ronment  where the only way of gaining capabilities
-    // is by executing  a  program  with  associated  file
-    // capabilities:
-    //
-    //     prctl(PR_SET_SECUREBITS,
-    //          /* SECBIT_KEEP_CAPS off */
-    //             SECBIT_KEEP_CAPS_LOCKED |
-    //             SECBIT_NO_SETUID_FIXUP |
-    //             SECBIT_NO_SETUID_FIXUP_LOCKED |
-    //             SECBIT_NOROOT |
-    //             SECBIT_NOROOT_LOCKED);
-    //             /* Setting/locking SECBIT_NO_CAP_AMBIENT_RAISE
-    //                is not required */
-    //
-    // 0x2f == that value, which isn't currently exposed by libc::.
-    unsafe { libc::prctl(libc::PR_SET_SECUREBITS, 0x2f, 0, 0, 0) };
-
-    let max_cap: libc::c_int = fs::read_to_string("/proc/sys/kernel/cap_last_cap")?
-        .trim()
-        .parse()?;
-
-    ensure!(max_cap > 0, "negative cap? {}", max_cap);
-
-    for cap in 0..=max_cap {
-        match unsafe { libc::prctl(libc::PR_CAPBSET_DROP, cap, 0, 0, 0) } {
-            0 | libc::EINVAL => (),
-            e => Err(nix::errno::Errno::from_i32(e))?,
-        }
-    }
-
-    Ok(())
 }
 
 fn make_mount_destination(name: &'static str) -> Result<(), Error> {

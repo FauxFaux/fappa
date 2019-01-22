@@ -1,6 +1,7 @@
 use std::env;
 use std::fmt::Display;
 use std::fs;
+use std::io;
 use std::io::Read;
 use std::io::Write;
 use std::os::unix::io::AsRawFd;
@@ -63,24 +64,40 @@ fn work(host: &mut Host) -> Result<(), Error> {
     loop {
         let (code, data) = host.read_msg()?;
         match code {
-            100 => run(host, data)?,
+            100 => run(host, data, false)?,
             101 => return Ok(()),
+            102 => run(host, data, true)?,
             _ => bail!("unsupported code: {}", code),
         };
     }
 }
 
-fn run(host: &mut Host, data: Vec<u8>) -> Result<(), Error> {
+fn run(host: &mut Host, data: Vec<u8>, root: bool) -> Result<(), Error> {
     use std::os::unix::process::CommandExt;
 
-    let mut proc = process::Command::new("/bin/dash")
+    let mut builder = process::Command::new("/bin/dash");
+
+    builder
         .arg("-c")
         .arg("/bin/bash 2>&1")
-        //        .uid(1000)
-        //        .gid(1000)
         .stdin(process::Stdio::piped())
         .stdout(process::Stdio::piped())
-        .stderr(process::Stdio::null())
+        .stderr(process::Stdio::null());
+
+    if !root {
+        builder.before_exec(|| {
+            drop_caps()?;
+            unistd::setuid(unistd::Uid::from_raw(212))
+                .map_err(nix_to_io)?;
+            let gid = unistd::Gid::from_raw(212);
+            unistd::setgid(gid).map_err(nix_to_io)?;
+            unistd::setgroups(&[gid]).map_err(nix_to_io)?;
+
+            Ok(())
+        });
+    }
+
+    let mut proc = builder
         .spawn()
         .with_context(|_| err_msg("launching script runner"))?;
 
@@ -163,6 +180,49 @@ fn close_fds_except(host: &mut Host, leave: &[RawFd]) -> Result<(), Error> {
     Ok(())
 }
 
+fn drop_caps() -> io::Result<()> {
+    // man:capabilities(7)
+    //
+    // An  application  can use the following call to lock
+    // itself, and all of its descendants, into  an  envi‐
+    // ronment  where the only way of gaining capabilities
+    // is by executing  a  program  with  associated  file
+    // capabilities:
+    //
+    //     prctl(PR_SET_SECUREBITS,
+    //          /* SECBIT_KEEP_CAPS off */
+    //             SECBIT_KEEP_CAPS_LOCKED |
+    //             SECBIT_NO_SETUID_FIXUP |
+    //             SECBIT_NO_SETUID_FIXUP_LOCKED |
+    //             SECBIT_NOROOT |
+    //             SECBIT_NOROOT_LOCKED);
+    //             /* Setting/locking SECBIT_NO_CAP_AMBIENT_RAISE
+    //                is not required */
+    //
+    // 0b0010_1111 == that value, which isn't currently exposed by libc::.
+    unsafe { libc::prctl(libc::PR_SET_SECUREBITS, 0b0010_1111, 0, 0, 0) };
+
+    let max_cap: libc::c_int = fs::read_to_string("/proc/sys/kernel/cap_last_cap")?
+        .trim()
+        .parse()
+        .ok()
+        .filter(|&v| v > 0)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "reading last_cap"))?;
+
+    for cap in 0..=max_cap {
+        if 0 != unsafe { libc::prctl(libc::PR_CAPBSET_DROP, cap, 0, 0, 0) } {
+            use nix::errno::Errno;
+            let err = Errno::last();
+            match err {
+                Errno::EINVAL => (),
+                e => Err(e)?,
+            }
+        }
+    }
+
+    Ok(())
+}
+
 struct Host {
     recv: os_pipe::PipeReader,
     send: os_pipe::PipeWriter,
@@ -198,5 +258,12 @@ impl Host {
             (0, ref v) if v.is_empty() => Ok(()),
             (other, _) => bail!("unexpected print response: {}", other),
         }
+    }
+}
+
+fn nix_to_io(e: nix::Error) -> io::Error {
+    match e {
+        nix::Error::Sys(e) => e.into(),
+        e => io::Error::new(io::ErrorKind::InvalidData, format!("{:?}", e)),
     }
 }
