@@ -1,86 +1,20 @@
-mod build;
-mod fetch_images;
-mod git;
-mod namespace;
-mod specs;
-mod unpack;
-
 use failure::bail;
 use failure::Error;
 use serde_json::json;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum Release {
-    DebianJessie,
-    DebianStretch,
-    DebianBuster,
-    UbuntuTrusty,
-    UbuntuXenial,
-    UbuntuBionic,
-    UbuntuCosmic,
-    UbuntuDisco,
-}
-
-const RELEASES: [Release; 8] = [
-    // best
-    Release::UbuntuBionic,
-    Release::DebianStretch,
-    // older but supported
-    Release::UbuntuXenial,
-    Release::UbuntuTrusty,
-    Release::DebianJessie,
-    // pre-release
-    Release::UbuntuCosmic,
-    Release::UbuntuDisco,
-    Release::DebianBuster,
-];
-
-impl Release {
-    fn distro(&self) -> &'static str {
-        use crate::Release::*;
-        match self {
-            DebianJessie | DebianStretch | DebianBuster => "debian",
-            UbuntuTrusty | UbuntuXenial | UbuntuBionic | UbuntuCosmic | UbuntuDisco => "ubuntu",
-        }
-    }
-
-    fn codename(&self) -> &'static str {
-        use crate::Release::*;
-        match self {
-            DebianJessie => "jessie",
-            DebianStretch => "stretch",
-            DebianBuster => "buster",
-            UbuntuTrusty => "trusty",
-            UbuntuXenial => "xenial",
-            UbuntuBionic => "bionic",
-            UbuntuCosmic => "cosmic",
-            UbuntuDisco => "disco",
-        }
-    }
-
-    /// Older distros lack the locales-all package, which makes the locale
-    /// environment a lot more sane for builds. Perhaps we should generate some
-    /// extra locales on these distros?
-    fn locales_all(&self) -> bool {
-        use crate::Release::*;
-        match self {
-            DebianJessie => false,
-            DebianStretch => true,
-            DebianBuster => true,
-            UbuntuTrusty => false,
-            UbuntuXenial => true,
-            UbuntuBionic => true,
-            UbuntuCosmic => true,
-            UbuntuDisco => true,
-        }
-    }
-}
+use fappa::build;
+use fappa::fetch_images;
+use fappa::git;
+use fappa::namespace;
+use fappa::specs;
+use fappa::Release;
+use fappa::RELEASES;
 
 fn build_template(release: Release) -> Result<(), Error> {
     let from = format!("{}:{}", release.distro(), release.codename());
 
     {
-        include_str!("prepare-image.Dockerfile.hbs");
+        include_str!("../prepare-image.Dockerfile.hbs");
         &json!({
             "from": from,
             "locales": if release.locales_all() { "locales-all" } else { "locales" },
