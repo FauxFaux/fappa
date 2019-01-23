@@ -87,8 +87,7 @@ fn run(host: &mut Host, data: Vec<u8>, root: bool) -> Result<(), Error> {
     if !root {
         builder.before_exec(|| {
             drop_caps()?;
-            unistd::setuid(unistd::Uid::from_raw(212))
-                .map_err(nix_to_io)?;
+            unistd::setuid(unistd::Uid::from_raw(212)).map_err(nix_to_io)?;
             let gid = unistd::Gid::from_raw(212);
             unistd::setgid(gid).map_err(nix_to_io)?;
             unistd::setgroups(&[gid]).map_err(nix_to_io)?;

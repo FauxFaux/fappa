@@ -1,6 +1,9 @@
 use std::fs;
 use std::path::PathBuf;
 
+use failure::bail;
+use failure::ensure;
+use failure::format_err;
 use failure::Error;
 use failure::ResultExt;
 use git2;

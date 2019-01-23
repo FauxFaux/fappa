@@ -1,19 +1,3 @@
-extern crate clap;
-extern crate fs_extra;
-
-#[macro_use]
-extern crate failure;
-extern crate git2;
-
-#[macro_use]
-extern crate serde_derive;
-
-#[macro_use]
-extern crate serde_json;
-extern crate toml;
-extern crate url;
-extern crate walkdir;
-
 mod build;
 mod fetch_images;
 mod git;
@@ -21,7 +5,9 @@ mod namespace;
 mod specs;
 mod unpack;
 
+use failure::bail;
 use failure::Error;
+use serde_json::json;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Release {

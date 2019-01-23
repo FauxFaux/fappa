@@ -7,7 +7,9 @@ use std::os::unix::io::AsRawFd;
 use std::path;
 use std::process;
 
+use failure::ensure;
 use failure::err_msg;
+use failure::format_err;
 use failure::Error;
 use failure::ResultExt;
 use std::ffi::CString;
@@ -186,9 +188,7 @@ fn setup_namespace(
     setresgid(Gid::from_raw(0), Gid::from_raw(0), Gid::from_raw(0))
         .with_context(|_| err_msg("setgid"))?;
 
-    setgroups(&[Gid::from_raw(0)])
-        .with_context(|_| err_msg("setgroups(0)"))?;
-
+    setgroups(&[Gid::from_raw(0)]).with_context(|_| err_msg("setgroups(0)"))?;
 
     make_mount_destination("old")?;
     pivot_root(&Some("."), &Some("old")).with_context(|_| err_msg("pivot_root"))?;

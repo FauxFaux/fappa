@@ -6,7 +6,9 @@ use byteorder::WriteBytesExt;
 use byteorder::LE;
 use cast::u64;
 use cast::usize;
+use failure::bail;
 use failure::err_msg;
+use failure::format_err;
 use failure::Error;
 use failure::ResultExt;
 

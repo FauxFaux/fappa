@@ -1,8 +1,11 @@
 use std::fs;
 use std::path::Path;
 
+use failure::bail;
+use failure::ensure;
 use failure::Error;
 use failure::ResultExt;
+use serde_derive::Deserialize;
 use toml;
 use url::Url;
 use walkdir;

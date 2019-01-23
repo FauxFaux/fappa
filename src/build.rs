@@ -1,6 +1,7 @@
 use std::fs;
 use std::io::Write;
 
+use failure::ensure;
 use failure::Error;
 use fs_extra::dir;
 use tempfile;
