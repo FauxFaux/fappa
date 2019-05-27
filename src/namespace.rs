@@ -76,8 +76,11 @@ pub fn prepare(distro: &str) -> Result<child::Child, Error> {
     into_send.write_all(b"a")?;
 
     Ok(child::Child {
-        recv: from_recv,
-        send: into_send,
+        proto: child::Proto {
+            recv: from_recv,
+            send: into_send,
+            _types: Default::default(),
+        },
         pid: first_fork,
     })
 }

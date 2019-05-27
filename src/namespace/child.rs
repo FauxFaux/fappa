@@ -1,5 +1,6 @@
 use std::io::Read;
 use std::io::Write;
+use std::marker::PhantomData;
 
 use byteorder::ByteOrder;
 use byteorder::WriteBytesExt;
@@ -33,10 +34,14 @@ pub enum CodeTo {
     Die = 103,
 }
 
-#[derive(Debug)]
-pub struct Child {
+pub struct Proto<S, R> {
     pub send: os_pipe::PipeWriter,
     pub recv: os_pipe::PipeReader,
+    pub _types: (PhantomData<S>, PhantomData<R>),
+}
+
+pub struct Child {
+    pub proto: Proto<CodeTo, CodeFrom>,
     pub pid: nix::unistd::Pid,
 }
 
@@ -62,29 +67,30 @@ impl Child {
     }
 
     pub fn msg(&mut self) -> Result<Option<FromChild>, Error> {
-        let (code, data) = self.read_msg()?;
-        match CodeFrom::from_u64(code) {
-            Some(CodeFrom::DebugOutput) => {
-                self.write_msg(CodeTo::Ack, &[])?;
+        let (code, data) = self.proto.read_msg()?;
+        match code {
+            (CodeFrom::DebugOutput) => {
+                self.proto.write_msg(CodeTo::Ack, &[])?;
                 Ok(Some(FromChild::Debug(String::from_utf8(data)?)))
             }
-            Some(CodeFrom::ShutdownSuccess) => Ok(None),
-            Some(CodeFrom::ShutdownError) => Err(err_msg(String::from_utf8(data)?)),
-            Some(CodeFrom::Ready) => Ok(Some(FromChild::Ready)),
-            Some(CodeFrom::Output) => Ok(Some(FromChild::Output(data))),
-            Some(CodeFrom::SubExited) => Ok(Some(FromChild::SubExited(data[0]))),
-            // TODO: should we tell the client to die here?
-            None => bail!("unsupported client code: {}", code),
+            (CodeFrom::ShutdownSuccess) => Ok(None),
+            (CodeFrom::ShutdownError) => Err(err_msg(String::from_utf8(data)?)),
+            (CodeFrom::Ready) => Ok(Some(FromChild::Ready)),
+            (CodeFrom::Output) => Ok(Some(FromChild::Output(data))),
+            (CodeFrom::SubExited) => Ok(Some(FromChild::SubExited(data[0]))),
         }
     }
+}
 
-    fn read_msg(&mut self) -> Result<(u64, Vec<u8>), Error> {
+impl<S: num_traits::ToPrimitive, R: num_traits::FromPrimitive> Proto<S, R> {
+    fn read_msg(&mut self) -> Result<(R, Vec<u8>), Error> {
         let mut buf = [0u8; 16];
         self.recv
             .read_exact(&mut buf)
             .with_context(|_| err_msg("reading header from child"))?;
         let len = LE::read_u64(&buf[..=8]);
         let code = LE::read_u64(&buf[8..]);
+        let code = R::from_u64(code).ok_or_else(|| format_err!("invalid command: {}", code))?;
         let mut buf = vec![0u8; usize(len - 16)];
         self.recv
             .read_exact(&mut buf)
@@ -92,7 +98,7 @@ impl Child {
         Ok((code, buf))
     }
 
-    pub fn write_msg(&mut self, code: CodeTo, data: &[u8]) -> Result<(), Error> {
+    pub fn write_msg(&mut self, code: S, data: &[u8]) -> Result<(), Error> {
         let total = 16 + data.len();
         let mut msg = Vec::with_capacity(total);
         // header: length (including header), code

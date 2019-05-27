@@ -69,7 +69,9 @@ fn main() -> Result<(), Error> {
                 true => CodeTo::RunAsRoot,
                 false => CodeTo::RunWithoutRoot,
             };
-            child.write_msg(code, matches.value_of_os("cmd").unwrap().as_bytes())?;
+            child
+                .proto
+                .write_msg(code, matches.value_of_os("cmd").unwrap().as_bytes())?;
 
             while let Some(event) = child.msg()? {
                 match event {
@@ -84,7 +86,7 @@ fn main() -> Result<(), Error> {
                     _ => bail!("unexpected event: {:?}", event),
                 }
             }
-            child.write_msg(CodeTo::Die, &[])?;
+            child.proto.write_msg(CodeTo::Die, &[])?;
             println!("{:?}", child.msg()?);
         }
         ("fetch", _) => {
