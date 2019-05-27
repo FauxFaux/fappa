@@ -16,7 +16,7 @@ use failure::ResultExt;
 use num_traits::FromPrimitive;
 use num_traits::ToPrimitive;
 
-#[derive(Primitive, Copy, Clone, PartialEq, Eq)]
+#[derive(Primitive, Copy, Clone, Debug, PartialEq, Eq)]
 pub enum CodeFrom {
     DebugOutput = 1,
     ShutdownSuccess = 2,
@@ -26,7 +26,7 @@ pub enum CodeFrom {
     SubExited = 6,
 }
 
-#[derive(Primitive, Copy, Clone, PartialEq, Eq)]
+#[derive(Primitive, Copy, Clone, Debug, PartialEq, Eq)]
 pub enum CodeTo {
     Ack = 100,
     RunAsRoot = 101,
@@ -83,7 +83,7 @@ impl Child {
 }
 
 impl<S: num_traits::ToPrimitive, R: num_traits::FromPrimitive> Proto<S, R> {
-    fn read_msg(&mut self) -> Result<(R, Vec<u8>), Error> {
+    pub fn read_msg(&mut self) -> Result<(R, Vec<u8>), Error> {
         let mut buf = [0u8; 16];
         self.recv
             .read_exact(&mut buf)

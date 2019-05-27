@@ -9,21 +9,14 @@ use std::os::unix::io::FromRawFd;
 use std::os::unix::io::RawFd;
 use std::process;
 
-use byteorder::ByteOrder;
-use byteorder::WriteBytesExt;
-use byteorder::LE;
-use cast::u64;
-use cast::usize;
 use failure::bail;
 use failure::err_msg;
 use failure::format_err;
 use failure::Error;
 use failure::ResultExt;
 use nix::unistd;
-use num_traits::FromPrimitive;
-use num_traits::ToPrimitive;
 
-use fappa::namespace::child::CodeFrom;
+use fappa::namespace::child::{CodeFrom, CodeTo, Proto};
 
 fn main() -> Result<(), Error> {
     assert_eq!(
@@ -37,8 +30,11 @@ fn main() -> Result<(), Error> {
     let send = env::args().nth(2).unwrap().parse()?;
 
     let mut host = Host {
-        recv: unsafe { os_pipe::PipeReader::from_raw_fd(recv) },
-        send: unsafe { os_pipe::PipeWriter::from_raw_fd(send) },
+        proto: Proto {
+            recv: unsafe { os_pipe::PipeReader::from_raw_fd(recv) },
+            send: unsafe { os_pipe::PipeWriter::from_raw_fd(send) },
+            _types: Default::default(),
+        },
     };
 
     close_fds_except(&mut host, &[0, 1, 2, recv, send]).with_context(|_| err_msg("closing fds"))?;
@@ -47,11 +43,11 @@ fn main() -> Result<(), Error> {
 
     match work(&mut host) {
         Ok(()) => {
-            host.write_msg(CodeFrom::ShutdownSuccess, &[])?;
+            host.proto.write_msg(CodeFrom::ShutdownSuccess, &[])?;
             Ok(())
         }
         Err(e) => {
-            host.write_msg(
+            host.proto.write_msg(
                 CodeFrom::ShutdownError,
                 format!("failure: {:?}", e).as_bytes(),
             )?;
@@ -65,15 +61,15 @@ fn work(host: &mut Host) -> Result<(), Error> {
         host.println(format!("{} {:?}", p.pid, p.cmdline()?))?;
     }
 
-    host.write_msg(CodeFrom::Ready, &[])?;
+    host.proto.write_msg(CodeFrom::Ready, &[])?;
 
     loop {
-        let (code, data) = host.read_msg()?;
+        let (code, data) = host.proto.read_msg()?;
         match code {
-            100 => run(host, data, false)?,
-            101 => return Ok(()),
-            102 => run(host, data, true)?,
-            _ => bail!("unsupported code: {}", code),
+            CodeTo::RunWithoutRoot => run(host, data, false)?,
+            CodeTo::RunAsRoot => run(host, data, true)?,
+            CodeTo::Die => return Ok(()),
+            _ => bail!("unsupported code: {:?}", code),
         };
     }
 }
@@ -114,7 +110,8 @@ fn run(host: &mut Host, data: Vec<u8>, root: bool) -> Result<(), Error> {
 
     host.println(format!("child: {:?}: {:?}", exit, driven))?;
 
-    host.write_msg(CodeFrom::SubExited, &[exit.code().unwrap_or(255) as u8])?;
+    host.proto
+        .write_msg(CodeFrom::SubExited, &[exit.code().unwrap_or(255) as u8])?;
 
     Ok(())
 }
@@ -140,7 +137,7 @@ fn drive_child(host: &mut Host, proc: &mut process::Child, data: &[u8]) -> Resul
             break;
         }
 
-        host.write_msg(CodeFrom::Output, &buf[..valid])?;
+        host.proto.write_msg(CodeFrom::Output, &buf[..valid])?;
     }
 
     Ok(())
@@ -229,39 +226,16 @@ fn drop_caps() -> io::Result<()> {
 }
 
 struct Host {
-    recv: os_pipe::PipeReader,
-    send: os_pipe::PipeWriter,
+    proto: Proto<CodeFrom, CodeTo>,
 }
 
 impl Host {
-    fn read_msg(&mut self) -> Result<(u64, Vec<u8>), Error> {
-        let mut buf = [0u8; 16];
-        self.recv.read_exact(&mut buf)?;
-        let len = LE::read_u64(&buf[..=8]);
-        let code = LE::read_u64(&buf[8..]);
-        let mut buf = vec![0u8; usize(len - 16)];
-        self.recv.read_exact(&mut buf)?;
-        Ok((code, buf))
-    }
-
-    fn write_msg(&mut self, code: CodeFrom, data: &[u8]) -> Result<(), Error> {
-        let total = 16 + data.len();
-        let mut msg = Vec::with_capacity(total);
-        // header: length (including header), code
-        msg.write_u64::<LE>(u64(total))?;
-        msg.write_u64::<LE>(code.to_u64().expect("static derive"))?;
-
-        // data:
-        msg.extend_from_slice(data);
-        self.send.write_all(&msg)?;
-        Ok(())
-    }
-
     fn println<D: Display>(&mut self, msg: D) -> Result<(), Error> {
-        self.write_msg(CodeFrom::DebugOutput, format!("{}", msg).as_bytes())?;
-        match self.read_msg()? {
-            (0, ref v) if v.is_empty() => Ok(()),
-            (other, _) => bail!("unexpected print response: {}", other),
+        self.proto
+            .write_msg(CodeFrom::DebugOutput, format!("{}", msg).as_bytes())?;
+        match self.proto.read_msg()? {
+            (CodeTo::Ack, ref v) if v.is_empty() => Ok(()),
+            (other, _) => bail!("unexpected print response: {:?}", other),
         }
     }
 }
