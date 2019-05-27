@@ -29,7 +29,6 @@ pub fn prepare(distro: &str) -> Result<child::Child, Error> {
     let (into_recv, mut into_send) = os_pipe::pipe()?;
 
     {
-        use std::os::unix::fs::PermissionsExt;
         let finit_host = format!("{}/bin/finit", root);
         reflink::reflink_or_copy("target/debug/finit", &finit_host)?;
         fs::set_permissions(&finit_host, fs::Permissions::from_mode(0o755))?;

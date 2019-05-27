@@ -4,7 +4,6 @@ use std::path::Path;
 
 use log::info;
 use failure::bail;
-use failure::err_msg;
 use failure::Error;
 
 pub fn fetch_ubuntu(cache: &Path, distros: &[&str]) -> Result<(), Error> {
