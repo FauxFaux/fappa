@@ -2,9 +2,9 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-use log::info;
 use failure::bail;
 use failure::Error;
+use log::info;
 
 pub fn fetch_ubuntu(cache: &Path, distros: &[&str]) -> Result<(), Error> {
     for distro in distros {
@@ -22,8 +22,6 @@ pub fn fetch_ubuntu(cache: &Path, distros: &[&str]) -> Result<(), Error> {
         info!("downloading {} to {:?}", url, path);
 
         let mut target_file = fs::File::create(path)?;
-
-
 
         let resp = ureq::get(&url).call();
 

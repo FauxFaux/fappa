@@ -1,4 +1,5 @@
 use std::env;
+use std::ffi::CString;
 use std::fs;
 use std::io::Read;
 use std::io::Write;
@@ -12,7 +13,7 @@ use failure::err_msg;
 use failure::format_err;
 use failure::Error;
 use failure::ResultExt;
-use std::ffi::CString;
+use void::ResultVoidErrExt;
 
 pub mod child;
 
@@ -42,13 +43,11 @@ pub fn prepare(distro: &str) -> Result<child::Child, Error> {
         use nix::unistd::*;
         match fork()? {
             ForkResult::Parent { child } => child,
-            ForkResult::Child => match setup_namespace(&root, into_recv, from_send) {
-                Ok(v) => void::unreachable(v),
-                Err(e) => {
-                    eprintln!("sandbox setup failed: {:?}", e);
-                    process::exit(67);
-                }
-            },
+            ForkResult::Child => {
+                let e = setup_namespace(&root, into_recv, from_send).void_unwrap_err();
+                eprintln!("sandbox setup failed: {:?}", e);
+                process::exit(67);
+            }
         }
     };
 
