@@ -1,28 +1,12 @@
 use failure::bail;
 use failure::Error;
-use serde_json::json;
 
 use fappa::build;
 use fappa::fetch_images;
 use fappa::git;
 use fappa::namespace;
 use fappa::specs;
-use fappa::Release;
 use fappa::RELEASES;
-
-fn build_template(release: Release) -> Result<(), Error> {
-    let from = format!("{}:{}", release.distro(), release.codename());
-
-    {
-        include_str!("../prepare-image.Dockerfile.hbs");
-        &json!({
-            "from": from,
-            "locales": if release.locales_all() { "locales-all" } else { "locales" },
-        });
-    }
-
-    unimplemented!("can't build");
-}
 
 fn main() -> Result<(), Error> {
     pretty_env_logger::init();
@@ -31,7 +15,6 @@ fn main() -> Result<(), Error> {
     use clap::SubCommand;
     let matches = clap::App::new("fappa")
         .setting(clap::AppSettings::SubcommandRequiredElseHelp)
-        .subcommand(SubCommand::with_name("build-images").arg(Arg::with_name("pull").long("pull")))
         .subcommand(SubCommand::with_name("validate"))
         .subcommand(SubCommand::with_name("build"))
         .subcommand(
@@ -45,15 +28,9 @@ fn main() -> Result<(), Error> {
                 .arg(Arg::with_name("root").short("r")),
         )
         .subcommand(SubCommand::with_name("fetch"))
-        .subcommand(SubCommand::with_name("null"))
         .get_matches();
 
     match matches.subcommand() {
-        ("build-images", _) => {
-            for release in &RELEASES {
-                build_template(*release)?;
-            }
-        }
         ("validate", _) => {
             for package in specs::load_from("specs")? {
                 for command in package.source {
@@ -106,9 +83,6 @@ fn main() -> Result<(), Error> {
             child.write_msg(101, &[])?;
             println!("{:?}", child.msg()?);
         }
-        ("null", _) => {
-            println!();
-        }
         ("fetch", _) => {
             let ubuntu_codenames = RELEASES
                 .iter()
@@ -116,8 +90,6 @@ fn main() -> Result<(), Error> {
                 .map(|r| r.codename())
                 .collect::<Vec<_>>();
             fetch_images::fetch_ubuntu(&ubuntu_codenames)?;
-
-            unimplemented!("fetch debian");
         }
         _ => unreachable!(),
     }
