@@ -1,71 +1,39 @@
 use std::fs;
-use std::sync::Arc;
+use std::io;
+use std::path::Path;
 
-use async_fetcher::AsyncFetcher;
+use log::info;
+use failure::bail;
 use failure::err_msg;
 use failure::Error;
-use futures::future::Future;
-use futures::stream;
-use futures::stream::Stream;
-use reqwest::r#async::Client;
-use tokio;
 
-pub fn fetch_ubuntu(distros: &[&str]) -> Result<(), Error> {
-    let mut work = Vec::new();
-
+pub fn fetch_ubuntu(cache: &Path, distros: &[&str]) -> Result<(), Error> {
     for distro in distros {
-        fs::create_dir_all(distro)?;
+        let mut path = cache.to_path_buf();
+        path.push("base-images");
+        path.push(distro);
+        fs::create_dir_all(&path)?;
+        path.push("root.tar.gz");
 
-        let root = format!(
-            "https://partner-images.canonical.com/core/{}/current",
+        let url = format!(
+            "https://partner-images.canonical.com/core/{0}/current/ubuntu-{0}-core-cloudimg-amd64-root.tar.gz",
             distro
         );
 
-        for (name, dest) in &[
-            ("SHA256SUMS.gpg".to_string(), "SHA256SUMS.gpg"),
-            ("SHA256SUMS".to_string(), "SHA256SUMS"),
-            (
-                format!("ubuntu-{}-core-cloudimg-amd64-root.tar.gz", distro),
-                "amd64-root.tar.gz",
-            ),
-        ] {
-            work.push((
-                format!("{}/{}", root, name),
-                format!("{}/{}", distro, dest),
-                format!("{}/.{}.partial", distro, dest),
-                format!("{}: {}", distro, name),
-            ));
+        info!("downloading {} to {:?}", url, path);
+
+        let mut target_file = fs::File::create(path)?;
+
+
+
+        let resp = ureq::get(&url).call();
+
+        if !resp.ok() {
+            bail!("download of {} failed: {}", url, resp.status());
         }
+
+        io::copy(&mut resp.into_reader(), &mut target_file)?;
     }
-
-    let client = Arc::new(Client::new());
-
-    let s = stream::iter_ok(work)
-        .map(move |(url, dest, temp, log_prefix)| {
-            AsyncFetcher::new(&client, url)
-                .with_progress_callback(move |ev| {
-                    use async_fetcher::FetchEvent::*;
-                    match ev {
-                        Get => println!("{}: Downloading...", log_prefix),
-                        DownloadComplete => println!("{}: Complete.", log_prefix),
-                        _ => (),
-                    }
-                })
-                .request_to_path(dest.into())
-                .then_download(temp.into())
-                .then_rename()
-                .into_future()
-        })
-        .buffer_unordered(6);
-
-    let mut runtime = tokio::runtime::Runtime::new()?;
-
-    runtime.block_on(s.collect())?;
-
-    runtime
-        .shutdown_now()
-        .wait()
-        .map_err(|()| err_msg("failed during shutdown"))?;
 
     Ok(())
 }

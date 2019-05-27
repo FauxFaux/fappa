@@ -1,4 +1,5 @@
 use failure::bail;
+use failure::err_msg;
 use failure::Error;
 
 use fappa::build;
@@ -10,6 +11,8 @@ use fappa::RELEASES;
 
 fn main() -> Result<(), Error> {
     pretty_env_logger::init();
+    let dirs = directories::ProjectDirs::from("xxx", "fau", "fappa")
+        .ok_or_else(|| err_msg("no project dirs"))?;
 
     use clap::Arg;
     use clap::SubCommand;
@@ -89,7 +92,8 @@ fn main() -> Result<(), Error> {
                 .filter(|r| "ubuntu" == r.distro())
                 .map(|r| r.codename())
                 .collect::<Vec<_>>();
-            fetch_images::fetch_ubuntu(&ubuntu_codenames)?;
+
+            fetch_images::fetch_ubuntu(dirs.cache_dir(), &ubuntu_codenames)?;
         }
         _ => unreachable!(),
     }
