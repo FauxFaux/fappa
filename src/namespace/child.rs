@@ -6,11 +6,32 @@ use byteorder::WriteBytesExt;
 use byteorder::LE;
 use cast::u64;
 use cast::usize;
+use enum_primitive_derive::Primitive;
 use failure::bail;
 use failure::err_msg;
 use failure::format_err;
 use failure::Error;
 use failure::ResultExt;
+use num_traits::FromPrimitive;
+use num_traits::ToPrimitive;
+
+#[derive(Primitive, Copy, Clone, PartialEq, Eq)]
+pub enum CodeFrom {
+    DebugOutput = 1,
+    ShutdownSuccess = 2,
+    ShutdownError = 3,
+    Ready = 4,
+    Output = 5,
+    SubExited = 6,
+}
+
+#[derive(Primitive, Copy, Clone, PartialEq, Eq)]
+pub enum CodeTo {
+    Ack = 100,
+    RunAsRoot = 101,
+    RunWithoutRoot = 102,
+    Die = 103,
+}
 
 #[derive(Debug)]
 pub struct Child {
@@ -42,18 +63,18 @@ impl Child {
 
     pub fn msg(&mut self) -> Result<Option<FromChild>, Error> {
         let (code, data) = self.read_msg()?;
-        match code {
-            1 => {
-                self.write_msg(0, &[])?;
+        match CodeFrom::from_u64(code) {
+            Some(CodeFrom::DebugOutput) => {
+                self.write_msg(CodeTo::Ack, &[])?;
                 Ok(Some(FromChild::Debug(String::from_utf8(data)?)))
             }
-            2 => Ok(None),
-            3 => Err(err_msg(String::from_utf8(data)?)),
-            4 => Ok(Some(FromChild::Ready)),
-            5 => Ok(Some(FromChild::Output(data))),
-            6 => Ok(Some(FromChild::SubExited(data[0]))),
+            Some(CodeFrom::ShutdownSuccess) => Ok(None),
+            Some(CodeFrom::ShutdownError) => Err(err_msg(String::from_utf8(data)?)),
+            Some(CodeFrom::Ready) => Ok(Some(FromChild::Ready)),
+            Some(CodeFrom::Output) => Ok(Some(FromChild::Output(data))),
+            Some(CodeFrom::SubExited) => Ok(Some(FromChild::SubExited(data[0]))),
             // TODO: should we tell the client to die here?
-            code => bail!("unsupported client code: {}", code),
+            None => bail!("unsupported client code: {}", code),
         }
     }
 
@@ -71,12 +92,12 @@ impl Child {
         Ok((code, buf))
     }
 
-    pub fn write_msg(&mut self, code: u64, data: &[u8]) -> Result<(), Error> {
+    pub fn write_msg(&mut self, code: CodeTo, data: &[u8]) -> Result<(), Error> {
         let total = 16 + data.len();
         let mut msg = Vec::with_capacity(total);
         // header: length (including header), code
         msg.write_u64::<LE>(u64(total))?;
-        msg.write_u64::<LE>(code)?;
+        msg.write_u64::<LE>(code.to_u64().expect("static derivation"))?;
 
         // data:
         msg.extend_from_slice(data);

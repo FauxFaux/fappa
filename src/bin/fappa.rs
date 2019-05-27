@@ -6,6 +6,7 @@ use fappa::build;
 use fappa::fetch_images;
 use fappa::git;
 use fappa::namespace;
+use fappa::namespace::child::CodeTo;
 use fappa::specs;
 use fappa::RELEASES;
 
@@ -65,8 +66,8 @@ fn main() -> Result<(), Error> {
             use std::os::unix::ffi::OsStrExt;
 
             let code = match matches.is_present("root") {
-                true => 102,
-                false => 100,
+                true => CodeTo::RunAsRoot,
+                false => CodeTo::RunWithoutRoot,
             };
             child.write_msg(code, matches.value_of_os("cmd").unwrap().as_bytes())?;
 
@@ -83,7 +84,7 @@ fn main() -> Result<(), Error> {
                     _ => bail!("unexpected event: {:?}", event),
                 }
             }
-            child.write_msg(101, &[])?;
+            child.write_msg(CodeTo::Die, &[])?;
             println!("{:?}", child.msg()?);
         }
         ("fetch", _) => {

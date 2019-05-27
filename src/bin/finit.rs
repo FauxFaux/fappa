@@ -20,6 +20,10 @@ use failure::format_err;
 use failure::Error;
 use failure::ResultExt;
 use nix::unistd;
+use num_traits::FromPrimitive;
+use num_traits::ToPrimitive;
+
+use fappa::namespace::child::CodeFrom;
 
 fn main() -> Result<(), Error> {
     assert_eq!(
@@ -43,12 +47,14 @@ fn main() -> Result<(), Error> {
 
     match work(&mut host) {
         Ok(()) => {
-            host.write_msg(2, &[])?;
+            host.write_msg(CodeFrom::ShutdownSuccess, &[])?;
             Ok(())
         }
         Err(e) => {
-            host.println(format!("failure: {:?}", e))?;
-            host.write_msg(3, &[])?;
+            host.write_msg(
+                CodeFrom::ShutdownError,
+                format!("failure: {:?}", e).as_bytes(),
+            )?;
             Err(e)
         }
     }
@@ -59,7 +65,7 @@ fn work(host: &mut Host) -> Result<(), Error> {
         host.println(format!("{} {:?}", p.pid, p.cmdline()?))?;
     }
 
-    host.write_msg(4, &[])?;
+    host.write_msg(CodeFrom::Ready, &[])?;
 
     loop {
         let (code, data) = host.read_msg()?;
@@ -108,7 +114,7 @@ fn run(host: &mut Host, data: Vec<u8>, root: bool) -> Result<(), Error> {
 
     host.println(format!("child: {:?}: {:?}", exit, driven))?;
 
-    host.write_msg(6, &[exit.code().unwrap_or(255) as u8])?;
+    host.write_msg(CodeFrom::SubExited, &[exit.code().unwrap_or(255) as u8])?;
 
     Ok(())
 }
@@ -134,7 +140,7 @@ fn drive_child(host: &mut Host, proc: &mut process::Child, data: &[u8]) -> Resul
             break;
         }
 
-        host.write_msg(5, &buf[..valid])?;
+        host.write_msg(CodeFrom::Output, &buf[..valid])?;
     }
 
     Ok(())
@@ -238,12 +244,12 @@ impl Host {
         Ok((code, buf))
     }
 
-    fn write_msg(&mut self, code: u64, data: &[u8]) -> Result<(), Error> {
+    fn write_msg(&mut self, code: CodeFrom, data: &[u8]) -> Result<(), Error> {
         let total = 16 + data.len();
         let mut msg = Vec::with_capacity(total);
         // header: length (including header), code
         msg.write_u64::<LE>(u64(total))?;
-        msg.write_u64::<LE>(code)?;
+        msg.write_u64::<LE>(code.to_u64().expect("static derive"))?;
 
         // data:
         msg.extend_from_slice(data);
@@ -252,7 +258,7 @@ impl Host {
     }
 
     fn println<D: Display>(&mut self, msg: D) -> Result<(), Error> {
-        self.write_msg(1, format!("{}", msg).as_bytes())?;
+        self.write_msg(CodeFrom::DebugOutput, format!("{}", msg).as_bytes())?;
         match self.read_msg()? {
             (0, ref v) if v.is_empty() => Ok(()),
             (other, _) => bail!("unexpected print response: {}", other),
