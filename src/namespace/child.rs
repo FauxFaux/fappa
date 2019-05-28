@@ -1,20 +1,15 @@
+use std::convert::TryInto;
 use std::io::Read;
 use std::io::Write;
 use std::marker::PhantomData;
 
-use byteorder::ByteOrder;
-use byteorder::WriteBytesExt;
-use byteorder::LE;
 use cast::u64;
 use cast::usize;
 use enum_primitive_derive::Primitive;
-use failure::bail;
 use failure::err_msg;
 use failure::format_err;
 use failure::Error;
 use failure::ResultExt;
-use num_traits::FromPrimitive;
-use num_traits::ToPrimitive;
 
 #[derive(Primitive, Copy, Clone, Debug, PartialEq, Eq)]
 pub enum CodeFrom {
@@ -69,15 +64,15 @@ impl Child {
     pub fn msg(&mut self) -> Result<Option<FromChild>, Error> {
         let (code, data) = self.proto.read_msg()?;
         match code {
-            (CodeFrom::DebugOutput) => {
+            CodeFrom::DebugOutput => {
                 self.proto.write_msg(CodeTo::Ack, &[])?;
                 Ok(Some(FromChild::Debug(String::from_utf8(data)?)))
             }
-            (CodeFrom::ShutdownSuccess) => Ok(None),
-            (CodeFrom::ShutdownError) => Err(err_msg(String::from_utf8(data)?)),
-            (CodeFrom::Ready) => Ok(Some(FromChild::Ready)),
-            (CodeFrom::Output) => Ok(Some(FromChild::Output(data))),
-            (CodeFrom::SubExited) => Ok(Some(FromChild::SubExited(data[0]))),
+            CodeFrom::ShutdownSuccess => Ok(None),
+            CodeFrom::ShutdownError => Err(err_msg(String::from_utf8(data)?)),
+            CodeFrom::Ready => Ok(Some(FromChild::Ready)),
+            CodeFrom::Output => Ok(Some(FromChild::Output(data))),
+            CodeFrom::SubExited => Ok(Some(FromChild::SubExited(data[0]))),
         }
     }
 }
@@ -88,8 +83,8 @@ impl<S: num_traits::ToPrimitive, R: num_traits::FromPrimitive> Proto<S, R> {
         self.recv
             .read_exact(&mut buf)
             .with_context(|_| err_msg("reading header from child"))?;
-        let len = LE::read_u64(&buf[..=8]);
-        let code = LE::read_u64(&buf[8..]);
+        let len = u64::from_le_bytes(buf[..=8].try_into().expect("fixed slice"));
+        let code = u64::from_le_bytes(buf[8..].try_into().expect("fixed slice"));
         let code = R::from_u64(code).ok_or_else(|| format_err!("invalid command: {}", code))?;
         let mut buf = vec![0u8; usize(len - 16)];
         self.recv
@@ -102,8 +97,8 @@ impl<S: num_traits::ToPrimitive, R: num_traits::FromPrimitive> Proto<S, R> {
         let total = 16 + data.len();
         let mut msg = Vec::with_capacity(total);
         // header: length (including header), code
-        msg.write_u64::<LE>(u64(total))?;
-        msg.write_u64::<LE>(code.to_u64().expect("static derivation"))?;
+        msg.extend_from_slice(&u64(total).to_le_bytes());
+        msg.extend_from_slice(&code.to_u64().expect("static derivation").to_le_bytes());
 
         // data:
         msg.extend_from_slice(data);
