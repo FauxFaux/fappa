@@ -5,38 +5,47 @@ use std::io::Read;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::io::AsRawFd;
-use std::path;
+use std::path::Path;
+use std::path::PathBuf;
 use std::process;
 
+use failure::bail;
 use failure::ensure;
 use failure::err_msg;
 use failure::format_err;
 use failure::Error;
 use failure::ResultExt;
+use log::error;
 use void::ResultVoidErrExt;
 
 pub mod child;
 
-pub fn prepare(distro: &str) -> Result<child::Child, Error> {
-    let root = format!("{}/root", distro);
+pub fn unpack_to_temp<P: AsRef<Path>>(cache: P, distro: &str) -> Result<tempfile::TempDir, Error> {
+    let mut root = super::fetch_images::base_image(cache, distro)?;
+    root.push("root.tar.gz");
 
-    // TODO: do we need to do this unconditionally?
-    if !path::Path::new(&root).is_dir() {
-        fs::create_dir(&root)?;
-        crate::unpack::unpack(&format!("{}/amd64-root.tar.gz", distro), &root)?;
-    }
+    let temp = tempfile::TempDir::new()?;
+    crate::unpack::unpack(&root, &temp)
+        .with_context(|_| format_err!("unpacking {:?} to {:?}", root, temp))?;
 
+    Ok(temp)
+}
+
+pub fn launch_our_init<P: AsRef<Path>>(root: P) -> Result<child::Child, Error> {
     let (mut from_recv, from_send) = os_pipe::pipe()?;
     let (into_recv, mut into_send) = os_pipe::pipe()?;
 
     {
-        let finit_host = format!("{}/bin/finit", root);
+        let mut finit_host = root.as_ref().to_path_buf();
+        finit_host.push("bin");
+        finit_host.push("finit");
         reflink::reflink_or_copy("target/debug/finit", &finit_host)?;
         fs::set_permissions(&finit_host, fs::Permissions::from_mode(0o755))?;
-        fs::write(
-            format!("{}/etc/resolv.conf", root),
-            b"nameserver 127.0.0.53",
-        )?;
+
+        let mut resolv_conf_host = root.as_ref().to_path_buf();
+        resolv_conf_host.push("etc");
+        resolv_conf_host.push("resolv.conf");
+        fs::write(resolv_conf_host, b"nameserver 127.0.0.53")?;
     }
 
     let first_fork = {
@@ -45,7 +54,7 @@ pub fn prepare(distro: &str) -> Result<child::Child, Error> {
             ForkResult::Parent { child } => child,
             ForkResult::Child => {
                 let e = setup_namespace(&root, into_recv, from_send).void_unwrap_err();
-                eprintln!("sandbox setup failed: {:?}", e);
+                error!("sandbox setup failed: {:?}", e);
                 process::exit(67);
             }
         }
@@ -95,8 +104,8 @@ fn reopen_stdin_as_null() -> Result<(), Error> {
     Ok(())
 }
 
-fn setup_namespace(
-    root: &str,
+fn setup_namespace<P: AsRef<Path>>(
+    root: P,
     mut recv: os_pipe::PipeReader,
     mut send: os_pipe::PipeWriter,
 ) -> Result<void::Void, Error> {
@@ -131,8 +140,8 @@ fn setup_namespace(
 
         // mount our unpacked root on itself, inside the new namespace
         mount(
-            Some(root),
-            root,
+            Some(root.as_ref()),
+            root.as_ref(),
             unset,
             MsFlags::MS_BIND | MsFlags::MS_NOSUID,
             unset,

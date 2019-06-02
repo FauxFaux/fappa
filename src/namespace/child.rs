@@ -6,10 +6,12 @@ use std::marker::PhantomData;
 use cast::u64;
 use cast::usize;
 use enum_primitive_derive::Primitive;
+use failure::bail;
 use failure::err_msg;
 use failure::format_err;
 use failure::Error;
 use failure::ResultExt;
+use log::info;
 
 #[derive(Primitive, Copy, Clone, Debug, PartialEq, Eq)]
 pub enum CodeFrom {
@@ -101,4 +103,50 @@ impl<S: num_traits::ToPrimitive, R: num_traits::FromPrimitive> Proto<S, R> {
         self.send.write_all(&msg)?;
         Ok(())
     }
+}
+
+pub fn await_ready(child: &mut Child) -> Result<(), Error> {
+    while let Some(event) = child.msg()? {
+        match event {
+            FromChild::Ready => break,
+            FromChild::Debug(m) => info!("child says: {}", m),
+            _ => bail!("unexpected event: {:?}", event),
+        }
+    }
+
+    Ok(())
+}
+
+pub fn execute(child: &mut Child, root: bool, cmd: &[u8]) -> Result<(), Error> {
+    let code = match root {
+        true => CodeTo::RunAsRoot,
+        false => CodeTo::RunWithoutRoot,
+    };
+
+    child.proto.write_msg(code, cmd)?;
+
+    while let Some(event) = child.msg()? {
+        match event {
+            FromChild::Debug(m) => println!("child says: {}", m),
+            FromChild::Output(m) => println!("child printed: {:?}", String::from_utf8_lossy(&m)),
+            FromChild::SubExited(c) => {
+                println!("child exited: {}", c);
+                break;
+            }
+            _ => bail!("unexpected event: {:?}", event),
+        }
+    }
+
+    Ok(())
+}
+
+pub fn shutdown(child: &mut Child) -> Result<(), Error> {
+    child.proto.write_msg(CodeTo::Die, &[])?;
+    while let Some(event) = child.msg()? {
+        match event {
+            FromChild::Debug(m) => info!("shutting down child says: {}", m),
+            _ => bail!("unexpected event: {:?}", event),
+        }
+    }
+    Ok(())
 }

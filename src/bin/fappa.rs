@@ -1,12 +1,11 @@
-use failure::bail;
 use failure::err_msg;
 use failure::Error;
+use failure::ResultExt;
 
 use fappa::build;
 use fappa::fetch_images;
 use fappa::git;
 use fappa::namespace;
-use fappa::namespace::child::CodeTo;
 use fappa::specs;
 use fappa::RELEASES;
 
@@ -53,41 +52,17 @@ fn main() -> Result<(), Error> {
             }
         }
         ("namespace", Some(matches)) => {
-            use namespace::child::FromChild;
-            let mut child = namespace::prepare("cosmic")?;
-            while let Some(event) = child.msg()? {
-                match event {
-                    FromChild::Ready => break,
-                    FromChild::Debug(m) => println!("child says: {}", m),
-                    _ => bail!("unexpected event: {:?}", event),
-                }
-            }
+            let root = matches.is_present("root");
+            let cmd = matches.value_of("cmd").unwrap().as_bytes();
 
-            use std::os::unix::ffi::OsStrExt;
+            let child = namespace::unpack_to_temp(dirs.cache_dir(), "disco")
+                .with_context(|_| err_msg("opening distro container"))?;
 
-            let code = match matches.is_present("root") {
-                true => CodeTo::RunAsRoot,
-                false => CodeTo::RunWithoutRoot,
-            };
-            child
-                .proto
-                .write_msg(code, matches.value_of_os("cmd").unwrap().as_bytes())?;
+            let mut child = namespace::launch_our_init(child)?;
 
-            while let Some(event) = child.msg()? {
-                match event {
-                    FromChild::Debug(m) => println!("child says: {}", m),
-                    FromChild::Output(m) => {
-                        println!("child printed: {:?}", String::from_utf8_lossy(&m))
-                    }
-                    FromChild::SubExited(c) => {
-                        println!("child exited: {}", c);
-                        break;
-                    }
-                    _ => bail!("unexpected event: {:?}", event),
-                }
-            }
-            child.proto.write_msg(CodeTo::Die, &[])?;
-            println!("{:?}", child.msg()?);
+            namespace::child::await_ready(&mut child)?;
+            namespace::child::execute(&mut child, root, cmd)?;
+            namespace::child::shutdown(&mut child)?;
         }
         ("fetch", _) => {
             let ubuntu_codenames = RELEASES
