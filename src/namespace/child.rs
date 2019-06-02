@@ -42,13 +42,9 @@ pub struct Child {
 
 #[derive(Debug, Clone)]
 pub enum FromChild {
-    // 1
     Debug(String),
-    // 4
     Ready,
-    // 5
     Output(Vec<u8>),
-    // 6
     SubExited(u8),
 }
 
