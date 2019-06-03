@@ -16,6 +16,7 @@ use failure::format_err;
 use failure::Error;
 use failure::ResultExt;
 use log::error;
+use log::info;
 use void::ResultVoidErrExt;
 
 pub mod child;
@@ -41,6 +42,7 @@ pub fn launch_our_init<P: AsRef<Path>>(root: P) -> Result<child::Child, Error> {
         finit_host.push("finit");
         reflink::reflink_or_copy("target/debug/finit", &finit_host)?;
         fs::set_permissions(&finit_host, fs::Permissions::from_mode(0o755))?;
+        info!("finit written to {:?}", finit_host);
 
         let mut resolv_conf_host = root.as_ref().to_path_buf();
         resolv_conf_host.push("etc");
@@ -148,7 +150,9 @@ fn setup_namespace<P: AsRef<Path>>(
         )
         .with_context(|_| err_msg("mount $root $root"))?;
 
-        env::set_current_dir(root)?;
+        env::set_current_dir(&root)?;
+        info!("root: {:?}", root.as_ref());
+        std::thread::sleep(std::time::Duration::from_secs(10));
 
         // make /proc visible inside the chroot.
         // without this, `mount -t proc proc /proc` fails with EPERM.
@@ -234,10 +238,26 @@ fn setup_pid_1(recv: os_pipe::PipeReader, send: os_pipe::PipeWriter) -> Result<v
         ensure!(1 == us, "we failed to actually end up as pid 1: {}", us);
     }
 
+    info!(
+        "root: {:?}",
+        fs::read_dir("/")?
+            .map(|e| e.unwrap().file_name())
+            .collect::<Vec<_>>()
+    );
+
+    assert!(fs::metadata("/bin")
+        .with_context(|_| err_msg("confirming /bin is in place"))?
+        .is_dir());
+    assert!(fs::metadata("/bin/finit")
+        .with_context(|_| err_msg("confirming our init is in place"))?
+        .is_file());
+
     {
         let sticky_for_all = fs::Permissions::from_mode(0o1777);
-        fs::set_permissions("/tmp", sticky_for_all.clone())?;
-        fs::set_permissions("/var/tmp", sticky_for_all)?;
+        fs::set_permissions("/tmp", sticky_for_all.clone())
+            .with_context(|_| err_msg("permissions for /tmp"))?;
+        fs::set_permissions("/var/tmp", sticky_for_all)
+            .with_context(|_| err_msg("permissions for /var/tmp"))?;
         // TODO: dev/shm?
     }
 
@@ -257,7 +277,7 @@ fn setup_pid_1(recv: os_pipe::PipeReader, send: os_pipe::PipeWriter) -> Result<v
         umount2(".host-proc", MntFlags::MNT_DETACH)
             .with_context(|_| err_msg("unmount .host-proc"))?;
 
-        fs::remove_dir(".host-proc")?;
+        fs::remove_dir(".host-proc").with_context(|_| err_msg("dropping host-proc"))?;
 
         mount(
             Some("/"),
@@ -269,8 +289,8 @@ fn setup_pid_1(recv: os_pipe::PipeReader, send: os_pipe::PipeWriter) -> Result<v
         .with_context(|_| err_msg("finalising /"))?;
     }
 
-    let recv = dup(recv.as_raw_fd())?;
-    let send = dup(send.as_raw_fd())?;
+    let recv = dup(recv.as_raw_fd()).with_context(|_| err_msg("copying recv handle"))?;
+    let send = dup(send.as_raw_fd()).with_context(|_| err_msg("copying send"))?;
 
     let proc = CString::new("/bin/finit")?;
     let argv0 = proc.clone();
