@@ -151,8 +151,6 @@ fn setup_namespace<P: AsRef<Path>>(
         .with_context(|_| err_msg("mount $root $root"))?;
 
         env::set_current_dir(&root)?;
-        info!("root: {:?}", root.as_ref());
-        std::thread::sleep(std::time::Duration::from_secs(10));
 
         // make /proc visible inside the chroot.
         // without this, `mount -t proc proc /proc` fails with EPERM.
