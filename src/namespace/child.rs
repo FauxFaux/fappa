@@ -81,7 +81,7 @@ impl<S: num_traits::ToPrimitive, R: num_traits::FromPrimitive> Proto<S, R> {
         self.recv
             .read_exact(&mut buf)
             .with_context(|_| err_msg("reading header from child"))?;
-        let len = u64::from_le_bytes(buf[..=8].try_into().expect("fixed slice"));
+        let len = u64::from_le_bytes(buf[..8].try_into().expect("fixed slice"));
         let code = u64::from_le_bytes(buf[8..].try_into().expect("fixed slice"));
         let code = R::from_u64(code).ok_or_else(|| format_err!("invalid command: {}", code))?;
         let mut buf = vec![0u8; usize(len - 16)];

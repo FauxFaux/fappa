@@ -1,5 +1,6 @@
 pub mod build;
 pub mod fetch_images;
+#[cfg(feature = "git2")]
 pub mod git;
 pub mod namespace;
 pub mod specs;

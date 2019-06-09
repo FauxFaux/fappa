@@ -12,7 +12,6 @@ directories = "2.0"
 enum-primitive-derive = "0.1"
 failure = "0.1"
 fs_extra = "1"
-git2 = "0.8"
 httpdate = "0.3"
 libc = "0.2"
 log = "0.4"
@@ -21,7 +20,6 @@ num-traits = "0.2"
 os_pipe = "0.8"
 pretty_env_logger = "0.3"
 psutil = "1"
-reflink = "0.1"
 serde = "1"
 serde_derive = "1"
 serde_json = "1"
@@ -33,7 +31,22 @@ url = "1"
 walkdir = "2"
 void = "1"
 
+[features]
+default = ["git2"]
+
 [dependencies.flate2]
 default-features = false
 features = ["rust_backend"]
 version = "1"
+
+[dependencies.git2]
+optional = true
+version = "0.8"
+
+[dependencies.reflink]
+# release + https://github.com/nicokoch/reflink/pull/5
+git = "https://github.com/FauxFaux/reflink"
+rev = "2a7528e1fd25432017b2fe518112e19f4420e46e"
+
+[profile.release]
+lto = true

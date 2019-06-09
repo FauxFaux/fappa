@@ -40,7 +40,7 @@ pub fn launch_our_init<P: AsRef<Path>>(root: P) -> Result<child::Child, Error> {
         let mut finit_host = root.as_ref().to_path_buf();
         finit_host.push("bin");
         finit_host.push("finit");
-        reflink::reflink_or_copy("target/debug/finit", &finit_host)?;
+        reflink::reflink_or_copy("target/x86_64-unknown-linux-musl/debug/finit", &finit_host)?;
         fs::set_permissions(&finit_host, fs::Permissions::from_mode(0o755))?;
         info!("finit written to {:?}", finit_host);
 

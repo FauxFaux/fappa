@@ -47,6 +47,7 @@ pub fn build(release: &Release, package: &Package) -> Result<(), Error> {
 
         for command in &package.source {
             match command {
+                #[cfg(feature = "git2")]
                 Command::Clone { repo, dest } => {
                     let crate::git::LocalRepo { specifier, path } = crate::git::check_cloned(repo)?;
 
