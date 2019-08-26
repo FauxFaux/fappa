@@ -87,15 +87,17 @@ fn run(host: &mut Host, data: Vec<u8>, root: bool) -> Result<(), Error> {
         .stderr(process::Stdio::null());
 
     if !root {
-        builder.before_exec(|| {
-            drop_caps()?;
-            unistd::setuid(unistd::Uid::from_raw(212)).map_err(nix_to_io)?;
-            let gid = unistd::Gid::from_raw(212);
-            unistd::setgid(gid).map_err(nix_to_io)?;
-            unistd::setgroups(&[gid]).map_err(nix_to_io)?;
+        unsafe {
+            builder.pre_exec(|| {
+                drop_caps()?;
+                unistd::setuid(unistd::Uid::from_raw(212)).map_err(nix_to_io)?;
+                let gid = unistd::Gid::from_raw(212);
+                unistd::setgid(gid).map_err(nix_to_io)?;
+                unistd::setgroups(&[gid]).map_err(nix_to_io)?;
 
-            Ok(())
-        });
+                Ok(())
+            })
+        };
     }
 
     let mut proc = builder
@@ -204,6 +206,7 @@ fn drop_caps() -> io::Result<()> {
     // 0b0010_1111 == that value, which isn't currently exposed by libc::.
     unsafe { libc::prctl(libc::PR_SET_SECUREBITS, 0b0010_1111, 0, 0, 0) };
 
+    // TODO: should probably not allocate here (due to pre_exec).
     let max_cap: libc::c_int = fs::read_to_string("/proc/sys/kernel/cap_last_cap")?
         .trim()
         .parse()
