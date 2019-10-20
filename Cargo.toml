@@ -42,8 +42,8 @@ version = "0.10"
 
 [dependencies.reflink]
 # release + https://github.com/nicokoch/reflink/pull/5
-git = "https://github.com/FauxFaux/reflink"
-rev = "2a7528e1fd25432017b2fe518112e19f4420e46e"
+git = "https://github.com/nicokoch/reflink"
+rev = "e8d93b465f5d9ad340cd052b64bbc77b8ee107e2"
 
 [features]
 default = ["git2"]
