@@ -11,13 +11,14 @@ clap = "2.33"
 directories = "2.0"
 enum-primitive-derive = "0.1"
 failure = "0.1"
+flate2 = "1"
 fs_extra = "1"
 httpdate = "0.3"
 libc = "0.2"
 log = "0.4"
 nix = "0.15"
 num-traits = "0.2"
-os_pipe = "0.8"
+os_pipe = "0.9"
 pretty_env_logger = "0.3"
 psutil = "1"
 serde = "1"
@@ -30,11 +31,6 @@ ureq = "0.11"
 url = "2"
 walkdir = "2"
 void = "1"
-
-[dependencies.flate2]
-default-features = false
-features = ["rust_backend"]
-version = "1"
 
 [dependencies.git2]
 optional = true
