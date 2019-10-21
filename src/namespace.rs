@@ -191,13 +191,11 @@ fn setup_namespace<P: AsRef<Path>>(
             });
         }
 
-        ForkResult::Child => match setup_pid_1(recv, send) {
-            Ok(v) => void::unreachable(v),
-            Err(e) => {
-                eprintln!("sandbox setup pid1 failed: {:?}", e);
-                process::exit(67);
-            }
-        },
+        ForkResult::Child => {
+            let e = setup_pid_1(recv, send).void_unwrap_err();
+            eprintln!("sandbox setup pid1 failed: {:?}", e);
+            process::exit(67);
+        }
     }
 }
 
