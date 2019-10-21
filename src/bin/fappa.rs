@@ -1,7 +1,6 @@
 use failure::err_msg;
 use failure::Error;
 use failure::ResultExt;
-use log::info;
 
 use fappa::build;
 use fappa::fetch_images;

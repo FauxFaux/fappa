@@ -1,20 +1,13 @@
-use std::convert::TryFrom;
 use std::env;
-use std::ffi::OsStr;
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 use std::fs;
-use std::io;
+use std::io::Read;
 use std::io::Write;
-use std::io::{BufRead, Read};
-use std::mem;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
-use std::path::PathBuf;
 use std::process;
-use std::ptr;
 
-use failure::bail;
 use failure::ensure;
 use failure::err_msg;
 use failure::format_err;
@@ -22,9 +15,6 @@ use failure::Error;
 use failure::ResultExt;
 use log::error;
 use log::info;
-use nix::unistd::sysconf;
-use nix::unistd::SysconfVar;
-use nix::unistd::Uid;
 use void::ResultVoidErrExt;
 
 pub mod child;
