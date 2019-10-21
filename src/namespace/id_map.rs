@@ -1,7 +1,9 @@
 use std::ffi::CStr;
+use std::fmt::Display;
 use std::fs;
 use std::io;
 use std::io::BufRead;
+use std::process;
 
 use failure::ensure;
 use failure::err_msg;
@@ -13,57 +15,47 @@ use nix::unistd::geteuid;
 use nix::unistd::Pid;
 
 pub fn map_us(first_fork: Pid) -> Result<(), Error> {
-    let real_euid = geteuid();
-    let real_egid = getegid();
+    let us = unsafe { bad_get_login() }?;
+    map(first_fork, &us, geteuid(), "uid").with_context(|_| err_msg("mapping uid"))?;
+    map(first_fork, &us, getegid(), "gid").with_context(|_| err_msg("mapping gid"))?;
+    Ok(())
+}
 
-    let us = unsafe { bad_get_login()? };
+// the error handling here sucks
+//
+// tl;dr you should have an entry in both /etc/subuid and /etc/subgid for your user*name*,
+// which looks like `faux:100000:65536`. The middle number can be anything, but the last number
+// must be 65536. We only look at the first entry. This is what `adduser` does on reasonable,
+// modern machines. If you've upgraded, you might not have it, and might need to make one
+// yourself.
+#[inline]
+pub fn map<D: Display>(first_fork: Pid, us: &str, id: D, style: &'static str) -> Result<(), Error> {
+    let file = format!("/etc/sub{}", style);
+    let (start, len) = load_first_sub_id_entry(&us, &file)
+        .with_context(|_| format_err!("loading {:?} from {:?}", us, file))?
+        .ok_or(format_err!("no sub{} entry for {:?}", style, us))?;
 
-    // the error handling here sucks
-    // tl;dr you should have an entry in both /etc/subuid and /etc/subgid for your user*name*,
-    // which looks like `faux:100000:65536`. The middle number can be anything, but the last number
-    // must be 65536. We only look at the first entry. This is what `adduser` does on reasonable,
-    // modern machines. If you've upgraded, you might not have it, and might need to make one
-    // yourself.
+    ensure!(len == 65536, "too few {}s: {}", style, len);
 
-    let (uid_start, uid_len) = load_first_sub_id_entry(&us, "/etc/subuid")?
-        .ok_or(format_err!("no subuid entry for {:?}", us))?;
-    let (gid_start, gid_len) = load_first_sub_id_entry(&us, "/etc/subgid")?
-        .ok_or(format_err!("no subgid entry for {:?}", us))?;
+    let command = format!("new{}map", style);
+    let pid = format!("{}", first_fork);
+    let id = format!("{}", id);
+    let start = format!("{}", start);
 
-    ensure!(uid_len == 65536 || gid_len == 65536, "too few ids");
+    let exit_status = process::Command::new(command)
+        .args(&[
+            &pid, // for this pid,
+            "0", &id, "1", // root maps to `id`, for a range of 1
+            "1", &start, "65535", // and `1` to `max-id` (assumed) maps to our sub range
+        ])
+        .status()
+        .with_context(|_| format_err!("running new{}map (uidmap package)", style))?;
 
     ensure!(
-        std::process::Command::new("newuidmap")
-            .args(&[
-                &format!("{}", first_fork),
-                "0",
-                &format!("{}", real_euid),
-                "1",
-                "1",
-                &format!("{}", uid_start),
-                "65535"
-            ])
-            .status()
-            .with_context(|_| err_msg("running newuidmap (uidmap package)"))?
-            .success(),
-        "setting up newuidmap for worker"
-    );
-
-    ensure!(
-        std::process::Command::new("newgidmap")
-            .args(&[
-                &format!("{}", first_fork),
-                "0",
-                &format!("{}", real_egid),
-                "1",
-                "1",
-                &format!("{}", gid_start),
-                "65535"
-            ])
-            .status()
-            .with_context(|_| err_msg("running newgidmap (uidmap package)"))?
-            .success(),
-        "setting up newgidmap for worker"
+        exit_status.success(),
+        "setting up new{}map for worker failed: {}",
+        style,
+        exit_status,
     );
 
     Ok(())
