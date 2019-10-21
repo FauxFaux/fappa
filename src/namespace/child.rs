@@ -7,6 +7,7 @@ use cast::u64;
 use cast::usize;
 use enum_primitive_derive::Primitive;
 use failure::bail;
+use failure::ensure;
 use failure::err_msg;
 use failure::format_err;
 use failure::Error;
@@ -101,6 +102,29 @@ impl<S: num_traits::ToPrimitive, R: num_traits::FromPrimitive> Proto<S, R> {
         // data:
         msg.extend_from_slice(data);
         self.send.write_all(&msg)?;
+        Ok(())
+    }
+
+    pub fn init_await_map_command(&mut self) -> Result<(), Error> {
+        let mut buf = [0u8; 4];
+        self.recv.read_exact(&mut buf)?;
+        ensure!(&buf == b"map?");
+        Ok(())
+    }
+
+    pub fn await_maps(
+        send: &mut os_pipe::PipeWriter,
+        recv: &mut os_pipe::PipeReader,
+    ) -> Result<(), Error> {
+        send.write_all(b"map?")?;
+        let mut buf = [0u8; 4];
+        recv.read_exact(&mut buf)?;
+        ensure!(&buf == b"map!");
+        Ok(())
+    }
+
+    pub fn init_map_complete(&mut self) -> Result<(), Error> {
+        self.send.write_all(b"map!")?;
         Ok(())
     }
 }

@@ -1,8 +1,6 @@
 use std::env;
 use std::ffi::CString;
 use std::fs;
-use std::io::Read;
-use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
@@ -32,8 +30,8 @@ pub fn unpack_to_temp<P: AsRef<Path>>(cache: P, distro: &str) -> Result<tempfile
 }
 
 pub fn launch_our_init<P: AsRef<Path>>(root: P) -> Result<child::Child, Error> {
-    let (mut from_recv, from_send) = os_pipe::pipe()?;
-    let (into_recv, mut into_send) = os_pipe::pipe()?;
+    let (from_recv, from_send) = os_pipe::pipe()?;
+    let (into_recv, into_send) = os_pipe::pipe()?;
 
     {
         let mut finit_host = root.as_ref().to_path_buf();
@@ -61,18 +59,20 @@ pub fn launch_our_init<P: AsRef<Path>>(root: P) -> Result<child::Child, Error> {
         }
     };
 
-    from_recv.read(&mut vec![0u8; 1])?;
+    let mut proto = child::Proto {
+        recv: from_recv,
+        send: into_send,
+        _types: Default::default(),
+    };
+
+    proto.init_await_map_command()?;
 
     id_map::map_us(first_fork)?;
 
-    into_send.write_all(b"a")?;
+    proto.init_map_complete()?;
 
     Ok(child::Child {
-        proto: child::Proto {
-            recv: from_recv,
-            send: into_send,
-            _types: Default::default(),
-        },
+        proto,
         pid: first_fork,
     })
 }
@@ -166,15 +166,7 @@ fn setup_namespace<P: AsRef<Path>>(
         .with_context(|_| err_msg("mount --bind /dev/null"))?;
     }
 
-    {
-        send.write_all(b"1")?;
-
-        let mut buf = [0u8; 1];
-        ensure!(
-            1 == recv.read(&mut buf)?,
-            "reading resume permission from host failed"
-        );
-    }
+    child::Proto::<u64, u64>::await_maps(&mut send, &mut recv)?;
 
     setresuid(Uid::from_raw(0), Uid::from_raw(0), Uid::from_raw(0))
         .with_context(|_| err_msg("setuid"))?;
