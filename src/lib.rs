@@ -16,6 +16,8 @@ pub enum Release {
     UbuntuBionic,
     UbuntuCosmic,
     UbuntuDisco,
+    UbuntuEoan,
+    UbuntuFossa,
 }
 
 pub const RELEASES: [Release; 8] = [
@@ -37,7 +39,8 @@ impl Release {
         use crate::Release::*;
         match self {
             DebianJessie | DebianStretch | DebianBuster => "debian",
-            UbuntuTrusty | UbuntuXenial | UbuntuBionic | UbuntuCosmic | UbuntuDisco => "ubuntu",
+            UbuntuTrusty | UbuntuXenial | UbuntuBionic | UbuntuCosmic | UbuntuDisco
+            | UbuntuEoan | UbuntuFossa => "ubuntu",
         }
     }
 
@@ -52,6 +55,8 @@ impl Release {
             UbuntuBionic => "bionic",
             UbuntuCosmic => "cosmic",
             UbuntuDisco => "disco",
+            UbuntuEoan => "eoan",
+            UbuntuFossa => "fossa",
         }
     }
 
@@ -69,6 +74,8 @@ impl Release {
             UbuntuBionic => true,
             UbuntuCosmic => true,
             UbuntuDisco => true,
+            UbuntuEoan => true,
+            UbuntuFossa => true,
         }
     }
 }
