@@ -58,7 +58,8 @@ fn main() -> Result<(), Error> {
             let child = namespace::unpack_to_temp(dirs.cache_dir(), "disco")
                 .with_context(|_| err_msg("opening distro container"))?;
 
-            let mut child = namespace::launch_our_init(&child)?;
+            let mut child = namespace::launch_our_init(&child)
+                .with_context(|_| err_msg("launching init"))?;
 
             namespace::child::await_ready(&mut child)?;
             namespace::child::execute(&mut child, root, cmd)?;
