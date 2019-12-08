@@ -37,38 +37,9 @@ pub fn build(release: &Release, package: &Package) -> Result<(), Error> {
         writeln!(dockerfile, "FROM fappa-{}", release.codename())?;
         writeln!(dockerfile, "WORKDIR /build")?;
 
-        if !package.build_dep.is_empty() {
-            writeln!(
-                dockerfile,
-                "RUN DEBIAN_FRONTEND=noninteractive apt-get install -y {}",
-                sorted_spaced(&package.build_dep),
-            )?;
-        }
-
-        for command in &package.source {
+        for command in &package.ser.commands {
             match command {
-                #[cfg(feature = "git2")]
-                Command::Clone { repo, dest } => {
-                    let crate::git::LocalRepo { specifier, path } = crate::git::check_cloned(repo)?;
-
-                    dir::copy(format!(".cache/{}", path), &dir, &dir::CopyOptions::new())?;
-                    writeln!(dockerfile, "COPY {} /repo/{}", path, path)?;
-                    writeln!(
-                        dockerfile,
-                        "RUN git clone --no-checkout /repo/{} {} && (cd {} && git {})",
-                        path,
-                        dest,
-                        dest,
-                        specifier.git_args()
-                    )?
-                }
-                _ => unimplemented!("source: {:?}", command),
-            }
-        }
-
-        for command in &package.build {
-            match command {
-                Command::WorkDir(dir) => writeln!(dockerfile, "WORKDIR {}", dir)?,
+                // Command::WorkDir(dir) => writeln!(dockerfile, "WORKDIR {}", dir)?,
                 Command::Autoreconf => writeln!(
                     dockerfile,
                     "RUN autoreconf -fvi && ./configure --prefix=/usr/local && make -j 2"
@@ -78,13 +49,6 @@ pub fn build(release: &Release, package: &Package) -> Result<(), Error> {
                     "RUN mkdir cmake-build-package && cd cmake-build-package && cmake .. && make -j 2"
                 )?,
                 _ => unimplemented!("build: {:?}", command),
-            }
-        }
-
-        for command in &package.install {
-            match command {
-                Command::Run(what) => writeln!(dockerfile, "CMD {}", what)?,
-                _ => unimplemented!("install: {:?}", command),
             }
         }
     }
@@ -108,7 +72,7 @@ pub fn build(release: &Release, package: &Package) -> Result<(), Error> {
     // should really be a list of everything that's in the tagged image?
     let existing_files = ["/usr", "/usr/local", "/build"];
 
-    rm.retain(|path| !matches(path, &package.exclude_files));
+    unimplemented!("rm.retain(|path| !matches(path, &package.exclude_files()));");
 
     ensure!(
         rm.is_empty(),
@@ -117,12 +81,13 @@ pub fn build(release: &Release, package: &Package) -> Result<(), Error> {
     );
 
     new.retain(|path| {
-        !existing_files.contains(&path.as_str()) && !matches(path, &package.exclude_files)
+        !existing_files.contains(&path.as_str())
+            && !matches(path, unimplemented!("&package.exclude_files()"))
     });
     {
         let violations: Vec<&String> = new
             .iter()
-            .filter(|path| !matches(path, &package.include_files))
+            .filter(|path| !matches(path, unimplemented!("&package.include_files")))
             .collect();
         ensure!(
             violations.is_empty(),

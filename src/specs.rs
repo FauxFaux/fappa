@@ -5,54 +5,28 @@ use failure::bail;
 use failure::ensure;
 use failure::Error;
 use failure::ResultExt;
-use serde_derive::Deserialize;
-use toml;
-use url::Url;
 use walkdir;
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-struct Spec {
-    package: Vec<PackageSerialisation>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-struct PackageSerialisation {
-    name: String,
-    build_dep: Vec<String>,
-    dep: Vec<String>,
-    source: Vec<String>,
-    build: Vec<String>,
-    install: Vec<String>,
-    include_files: Vec<String>,
-    exclude_files: Vec<String>,
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PackageSerialisation {
+    pub commands: Vec<Command>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Package {
-    pub name: String,
-    pub build_dep: Vec<String>,
-    pub dep: Vec<String>,
-    pub source: Vec<Command>,
-    pub build: Vec<Command>,
-    pub install: Vec<Command>,
-    pub include_files: Vec<String>,
-    pub exclude_files: Vec<String>,
+    pub ser: PackageSerialisation,
 }
 
 impl Package {
-    fn from_str(p: PackageSerialisation) -> Result<Package, Error> {
-        let context = p.name.to_string();
-        Ok(Package {
-            name: p.name,
-            build_dep: p.build_dep,
-            dep: p.dep,
-            source: parse_commands(p.source).with_context(|_| format!("source in {}", context))?,
-            build: parse_commands(p.build).with_context(|_| format!("build in {}", context))?,
-            install: parse_commands(p.install)
-                .with_context(|_| format!("install in {}", context))?,
-            include_files: p.include_files,
-            exclude_files: p.exclude_files,
-        })
+    fn from_str(ser: PackageSerialisation) -> Result<Package, Error> {
+        Ok(Package { ser })
+    }
+
+    pub fn exclude_files(&self) -> ! {
+        unimplemented!()
+    }
+    pub fn source(&self) -> Vec<Command> {
+        unimplemented!()
     }
 }
 
@@ -72,10 +46,12 @@ fn parse_command<S: AsRef<str>>(cmd: S) -> Result<Command, Error> {
 
     Ok(match op {
         "CLONE" => {
-            let (url, dest) = split_space(args);
+            let mut args = args.split(' ');
             Command::Clone {
-                repo: url.parse()?,
-                dest: dest.to_string(),
+                repo: args.next().unwrap().to_string(),
+                branch: args.next().unwrap().to_string(),
+                sha: args.next().unwrap().to_string(),
+                dest: args.next().unwrap().to_string(),
             }
         }
         "AUTORECONF" => {
@@ -86,8 +62,8 @@ fn parse_command<S: AsRef<str>>(cmd: S) -> Result<Command, Error> {
             ensure!(args.is_empty(), "cmake takes no arguments: {:?}", args);
             Command::CMake
         }
-        "WORKDIR" => Command::WorkDir(args.to_string()),
-        "RUN" => Command::Run(args.to_string()),
+        //"WORKDIR" => Command::WorkDir(args.to_string()),
+        //"RUN" => Command::Run(args.to_string()),
         other => bail!("unrecognised op: {:?}", other),
     })
 }
@@ -104,11 +80,14 @@ fn split_space(s: &str) -> (&str, &str) {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Command {
-    Clone { repo: Url, dest: String },
-    WorkDir(String),
+    Clone {
+        repo: String,
+        branch: String,
+        sha: String,
+        dest: String,
+    },
     Autoreconf,
     CMake,
-    Run(String),
 }
 
 pub fn load_from<P: AsRef<Path>>(dir: P) -> Result<Vec<Package>, Error> {
@@ -130,18 +109,32 @@ pub fn load_from<P: AsRef<Path>>(dir: P) -> Result<Vec<Package>, Error> {
             continue;
         }
 
-        let spec: Spec = toml::from_slice(
-            &fs::read(entry.path()).with_context(|_| format!("opening {:?}", entry.path()))?,
-        )?;
+        let text =
+            fs::read(entry.path()).with_context(|_| format!("opening {:?}", entry.path()))?;
+        let text = String::from_utf8(text)?;
+        let commands = blocks(&text)
+            .into_iter()
+            .map(parse_command)
+            .collect::<Result<Vec<_>, Error>>()
+            .with_context(|_| format!("parsing an entry in {:?}", entry.path()))?;
 
-        ret.extend(
-            spec.package
-                .into_iter()
-                .map(Package::from_str)
-                .collect::<Result<Vec<Package>, Error>>()
-                .with_context(|_| format!("parsing an entry in {:?}", entry.path()))?,
-        )
+        ret.push(Package {
+            ser: PackageSerialisation { commands },
+        });
     }
 
     Ok(ret)
+}
+
+fn blocks(text: &str) -> Vec<String> {
+    let text: Vec<_> = text
+        .lines()
+        .map(|l| l.trim_end())
+        .filter(|l| !l.starts_with('#'))
+        .collect();
+
+    text.split(|l| l.is_empty())
+        .filter(|b| !b.is_empty())
+        .map(|lines| lines.join("\n"))
+        .collect()
 }

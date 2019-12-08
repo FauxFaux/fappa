@@ -36,7 +36,7 @@ fn main() -> Result<(), Error> {
     match matches.subcommand() {
         ("validate", _) => {
             for package in specs::load_from("specs")? {
-                for command in package.source {
+                for command in package.source() {
                     match command {
                         specs::Command::Clone { repo, .. } => git::check_cloned(repo)?,
                         _ => continue,
