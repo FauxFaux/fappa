@@ -266,7 +266,9 @@ fn setup_pid_1(recv: os_pipe::PipeReader, send: os_pipe::PipeWriter) -> Result<v
     let recv = CString::new(format!("{}", recv))?;
     let send = CString::new(format!("{}", send))?;
 
-    void::unreachable(execv(&proc, &[argv0, recv, send]).with_context(|_| err_msg("exec finit"))?);
+    void::unreachable(
+        execv(&proc, &[&argv0, &recv, &send]).with_context(|_| err_msg("exec finit"))?,
+    );
 }
 
 fn make_mount_destination(name: &'static str) -> Result<(), Error> {
