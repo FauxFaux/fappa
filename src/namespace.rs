@@ -20,7 +20,7 @@ mod id_map;
 
 pub fn unpack_to_temp<P: AsRef<Path>>(cache: P, distro: &str) -> Result<tempfile::TempDir, Error> {
     let mut root = super::fetch_images::base_image(cache, distro)?;
-    root.push("root.tar.gz");
+    root.push("root.tar.zstd");
 
     let temp = tempfile::TempDir::new()?;
     crate::unpack::unpack(&root, &temp)

@@ -1,6 +1,7 @@
 use failure::err_msg;
 use failure::Error;
 use failure::ResultExt;
+use log::info;
 
 use fappa::build;
 use fappa::fetch_images;
@@ -10,7 +11,7 @@ use fappa::specs;
 use fappa::RELEASES;
 
 fn main() -> Result<(), Error> {
-    pretty_env_logger::init();
+    pretty_env_logger::init_timed();
     let dirs = directories::ProjectDirs::from("xxx", "fau", "fappa")
         .ok_or_else(|| err_msg("no project dirs"))?;
 
@@ -55,11 +56,13 @@ fn main() -> Result<(), Error> {
             let root = matches.is_present("root");
             let cmd = matches.value_of("cmd").unwrap().as_bytes();
 
+            info!("unpacking...");
             let child = namespace::unpack_to_temp(dirs.cache_dir(), "disco")
                 .with_context(|_| err_msg("opening distro container"))?;
+            info!("unpacked!");
 
-            let mut child = namespace::launch_our_init(&child)
-                .with_context(|_| err_msg("launching init"))?;
+            let mut child =
+                namespace::launch_our_init(&child).with_context(|_| err_msg("launching init"))?;
 
             namespace::child::await_ready(&mut child)?;
             namespace::child::execute(&mut child, root, cmd)?;

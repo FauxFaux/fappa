@@ -2,10 +2,14 @@ use std::fs;
 use std::io;
 use std::path::Path;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use failure::bail;
+use failure::format_err;
 use failure::Error;
+use failure::ResultExt;
 use log::info;
+use tempfile_fast::Sponge;
 
 pub fn base_image<P: AsRef<Path>>(cache: P, distro: &str) -> Result<PathBuf, Error> {
     let mut path = cache.as_ref().to_path_buf();
@@ -27,15 +31,20 @@ pub fn fetch_ubuntu(cache: &Path, distros: &[&str]) -> Result<(), Error> {
 
         info!("downloading {} to {:?}", url, path);
 
-        let mut target_file = fs::File::create(path)?;
-
-        let resp = ureq::get(&url).call();
-
-        if !resp.ok() {
-            bail!("download of {} failed: {}", url, resp.status());
+        if download_if_newer::ensure_downloaded_slop(&url, &path, Duration::from_secs(18 * 60 * 60))
+            .with_context(|_| format_err!("downloading {:?} to {:?}", url, path))?
+        {
+            let gz = path.clone();
+            path.pop();
+            path.push("root.tar.zstd");
+            let mut sponge = Sponge::new_for(&path)?;
+            let mut encoder = zstd::Encoder::new(sponge, 3)?;
+            io::copy(
+                &mut flate2::read::GzDecoder::new(fs::File::open(&gz)?),
+                &mut encoder,
+            )?;
+            encoder.finish()?.commit()?;
         }
-
-        io::copy(&mut resp.into_reader(), &mut target_file)?;
     }
 
     Ok(())
