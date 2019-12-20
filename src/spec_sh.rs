@@ -1,4 +1,8 @@
+use conch_parser::ast::DefaultWord;
+use conch_parser::ast::SimpleWord;
 use failure::bail;
+use failure::ensure;
+use failure::err_msg;
 use failure::Error;
 
 fn split(from: &str) -> Vec<String> {
@@ -14,37 +18,80 @@ fn strip_comments(from: &str) -> String {
 }
 
 fn tokens(from: &str) -> Result<Vec<String>, Error> {
+    use conch_parser::ast::Command;
+    use conch_parser::ast::ComplexWord;
+    use conch_parser::ast::ListableCommand;
+    use conch_parser::ast::PipeableCommand;
+    use conch_parser::ast::RedirectOrCmdWord;
+    use conch_parser::ast::TopLevelCommand;
+    use conch_parser::ast::TopLevelWord;
     use conch_parser::lexer::Lexer;
     use conch_parser::parse::DefaultParser;
-    use conch_parser::token::Token;
 
-    let mut ret = Vec::new();
-    let mut tokens = Lexer::new(from.chars()).peekable();
-    let mut prev_slash = false;
-    while let Some(val) = tokens.next() {
-        match val {
-            Token::Name(n) => ret.push(n),
-            Token::Backslash if tokens.peek() == Some(&Token::Newline) => {
-                prev_slash = true;
-            }
-            Token::Newline if prev_slash => {
-                prev_slash = false;
-            }
-            Token::Whitespace(_) => {
-                prev_slash = false;
-            }
-            other => bail!("unsupported token: {:?}", other),
-        }
-    }
+    let mut cmds = DefaultParser::new(Lexer::new(from.chars())).into_iter();
 
-    Ok(ret)
+    let cmd: TopLevelCommand<_> = cmds.next().ok_or_else(|| err_msg("no command"))??;
+
+    ensure!(cmds.next().is_none(), "multiple commands in one block");
+
+    let cmd = cmd.0;
+    let cmd = match cmd {
+        Command::List(l) => l,
+        Command::Job(_) => bail!("jobs not supported"),
+    };
+
+    ensure!(cmd.rest.is_empty(), "rest not supported");
+
+    let cmd = cmd.first;
+
+    let cmd = match cmd {
+        ListableCommand::Single(s) => s,
+        ListableCommand::Pipe(_, _) => bail!("pipes not supported"),
+    };
+
+    let cmd = match cmd {
+        PipeableCommand::Simple(s) => s,
+        other => bail!("command types not supported: {:?}", other),
+    };
+
+    ensure!(
+        cmd.redirects_or_env_vars.is_empty(),
+        "no redirects or env vars"
+    );
+
+    let cmd = cmd.redirects_or_cmd_words;
+
+    cmd.into_iter()
+        .map(|c| {
+            match c {
+                RedirectOrCmdWord::Redirect(_) => bail!("redirect not supported"),
+                RedirectOrCmdWord::CmdWord(w) => Ok(w),
+            }
+            .and_then(|w| match &*w {
+                ComplexWord::Single(w) => literal_word(w),
+                other => bail!("complex word {:?}", other),
+            })
+        })
+        .collect()
+}
+
+fn literal_word(word: &DefaultWord) -> Result<String, Error> {
+    use conch_parser::ast::Word;
+    Ok(match word {
+        Word::SingleQuoted(w) => w.to_string(),
+        Word::DoubleQuoted(w) => bail!("unsupported double quotes"),
+        Word::Simple(w) => match w {
+            SimpleWord::Literal(s) => s.to_string(),
+            other => bail!("unsupported simple word {:?}", other),
+        },
+    })
 }
 
 #[test]
 fn tokenizer() {
     assert_eq!(
-        vec![""],
-        tokens("foo \\\n  bar 'baz quux' \"lol\"").unwrap()
+        vec!["foo", "bar", "baz quux", "baz potato"],
+        tokens("foo \\\n  bar 'baz quux' 'baz potato'").unwrap()
     )
 }
 
