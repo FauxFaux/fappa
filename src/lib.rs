@@ -3,6 +3,7 @@ pub mod fetch_images;
 #[cfg(feature = "git2")]
 pub mod git;
 pub mod namespace;
+pub mod spec_sh;
 pub mod specs;
 pub mod unpack;
 

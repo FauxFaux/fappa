@@ -8,6 +8,7 @@ edition = "2018"
 [dependencies]
 cast = "0.2"
 clap = "2.33"
+conch-parser = "0.1"
 directories = "2.0"
 download-if-newer = { path = "../download-if-newer" }
 enum-primitive-derive = "0.1"
