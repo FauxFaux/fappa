@@ -3,10 +3,24 @@ use conch_parser::ast::SimpleWord;
 use failure::bail;
 use failure::ensure;
 use failure::err_msg;
+use failure::format_err;
 use failure::Error;
+use failure::ResultExt;
+
+pub fn load(from: &str) -> Result<Vec<Vec<String>>, Error> {
+    split(from)
+        .into_iter()
+        .map(
+            |block| Ok(tokens(&block).with_context(|_| format_err!("parsing block: {:?}", block))?),
+        )
+        .collect()
+}
 
 fn split(from: &str) -> Vec<String> {
-    from.split("\n\n").map(|p| strip_comments(p)).collect()
+    from.split("\n\n")
+        .map(|p| strip_comments(p))
+        .filter(|s| !s.trim().is_empty())
+        .collect()
 }
 
 fn strip_comments(from: &str) -> String {
@@ -112,4 +126,9 @@ baz \
 "
         )
     )
+}
+
+#[test]
+fn full_load() {
+    load(include_str!("../specs/sigrok.sh")).unwrap();
 }

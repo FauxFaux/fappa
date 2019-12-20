@@ -22,7 +22,7 @@ sudo apt install -y \
 sudo apt install -y \
   doxygen
 
-git-export git://developer.intra2net.com/libftdi master d5c1622a2ff0c722c0dc59533748489b45774e55 .
+git-export 'git://developer.intra2net.com/libftdi' master d5c1622a2ff0c722c0dc59533748489b45774e55 .
 
 fappa-cmake
 
