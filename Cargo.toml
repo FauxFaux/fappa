@@ -38,7 +38,7 @@ zstd = "0.5"
 
 [dependencies.git2]
 optional = true
-version = "0.10"
+version = "0.11"
 
 [dependencies.reflink]
 # release + https://github.com/nicokoch/reflink/pull/5

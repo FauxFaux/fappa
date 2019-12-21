@@ -1,3 +1,4 @@
+use std::ffi::CString;
 use std::fs;
 use std::path::PathBuf;
 
@@ -110,7 +111,7 @@ fn check_single(url: &Url, specifier: GitSpecifier) -> Result<(git2::Repository,
 
         // empty fetch array here undocumented, but seems to work?
         repo.remote(remote_name, url.as_str())?
-            .fetch(&[], None, None)?;
+            .fetch(&[] as &[&str], None, None)?;
 
         ensure!(
             specifier.find_in(&repo)?,
