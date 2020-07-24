@@ -57,8 +57,9 @@ fn main() -> Result<(), Error> {
 }
 
 fn work(host: &mut Host) -> Result<(), Error> {
-    for p in psutil::process::all()? {
-        host.println(format!("{} {:?}", p.pid, p.cmdline()?))?;
+    for p in psutil::process::processes()? {
+        let p = p?;
+        host.println(format!("{} {:?}", p.pid(), p.cmdline()?))?;
     }
 
     host.proto.write_msg(CodeFrom::Ready, &[])?;
