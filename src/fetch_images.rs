@@ -4,10 +4,10 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use failure::bail;
-use failure::format_err;
-use failure::Error;
-use failure::ResultExt;
+use anyhow::bail;
+use anyhow::format_err;
+use anyhow::Error;
+use anyhow::Context;
 use log::info;
 use tempfile_fast::Sponge;
 
@@ -32,7 +32,7 @@ pub fn fetch_ubuntu(cache: &Path, distros: &[&str]) -> Result<(), Error> {
         info!("downloading {} to {:?}", url, path);
 
         if download_if_newer::ensure_downloaded_slop(&url, &path, Duration::from_secs(18 * 60 * 60))
-            .with_context(|_| format_err!("downloading {:?} to {:?}", url, path))?
+            .with_context(|| format_err!("downloading {:?} to {:?}", url, path))?
         {
             let gz = path.clone();
             path.pop();

@@ -9,11 +9,11 @@ use std::os::unix::io::FromRawFd;
 use std::os::unix::io::RawFd;
 use std::process;
 
-use failure::bail;
-use failure::err_msg;
-use failure::format_err;
-use failure::Error;
-use failure::ResultExt;
+use anyhow::bail;
+use anyhow::anyhow;
+use anyhow::format_err;
+use anyhow::Error;
+use anyhow::Context;
 use nix::unistd;
 
 use fappa::namespace::child::{CodeFrom, CodeTo, Proto};
@@ -37,7 +37,7 @@ fn main() -> Result<(), Error> {
         },
     };
 
-    close_fds_except(&mut host, &[0, 1, 2, recv, send]).with_context(|_| err_msg("closing fds"))?;
+    close_fds_except(&mut host, &[0, 1, 2, recv, send]).with_context(|| anyhow!("closing fds"))?;
 
     host.println("I'm alive, the init with the second face.")?;
 
@@ -103,13 +103,13 @@ fn run(host: &mut Host, data: Vec<u8>, root: bool) -> Result<(), Error> {
 
     let mut proc = builder
         .spawn()
-        .with_context(|_| err_msg("launching script runner"))?;
+        .with_context(|| anyhow!("launching script runner"))?;
 
     let driven = drive_child(host, &mut proc, &data);
 
     let exit = proc
         .wait()
-        .with_context(|_| err_msg("waiting for finished process"))?;
+        .with_context(|| anyhow!("waiting for finished process"))?;
 
     host.println(format!("child: {:?}: {:?}", exit, driven))?;
 
@@ -123,15 +123,15 @@ fn drive_child(host: &mut Host, proc: &mut process::Child, data: &[u8]) -> Resul
     {
         proc.stdin
             .take()
-            .ok_or_else(|| err_msg("stdin requested"))?
+            .ok_or_else(|| anyhow!("stdin requested"))?
             .write_all(&data)
-            .with_context(|_| err_msg("sending script to shell"))?;
+            .with_context(|| anyhow!("sending script to shell"))?;
     }
 
     let stdout = proc
         .stdout
         .as_mut()
-        .ok_or_else(|| err_msg("stdout requested"))?;
+        .ok_or_else(|| anyhow!("stdout requested"))?;
 
     loop {
         let mut buf = [0u8; 1024 * 16];

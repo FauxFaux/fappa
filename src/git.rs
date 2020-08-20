@@ -2,11 +2,11 @@ use std::ffi::CString;
 use std::fs;
 use std::path::PathBuf;
 
-use failure::bail;
-use failure::ensure;
-use failure::format_err;
-use failure::Error;
-use failure::ResultExt;
+use anyhow::bail;
+use anyhow::ensure;
+use anyhow::format_err;
+use anyhow::Error;
+use anyhow::Context;
 use git2;
 use url::Url;
 
@@ -61,7 +61,7 @@ pub fn check_cloned<S: AsRef<str>>(url: S) -> Result<LocalRepo, Error> {
     url.set_query(None);
 
     let (repo, path) = check_single(&url, specifier)
-        .with_context(|_| format_err!("checking repo {} {:?}", url, specifier))?;
+        .with_context(|| format_err!("checking repo {} {:?}", url, specifier))?;
 
     // fails 'cos we don't have a working tree, right
     if false {
@@ -93,11 +93,11 @@ fn check_single(url: &Url, specifier: GitSpecifier) -> Result<(git2::Repository,
     path.push(&safe_url);
 
     let repo = if !path.is_dir() {
-        fs::create_dir_all(&path).with_context(|_| format_err!("creating repo dir in cache"))?;
+        fs::create_dir_all(&path).with_context(|| format_err!("creating repo dir in cache"))?;
         git2::Repository::init_bare(&path)
-            .with_context(|_| format_err!("initialising cache repository"))?
+            .with_context(|| format_err!("initialising cache repository"))?
     } else {
-        git2::Repository::open_bare(&path).with_context(|_| format_err!("opening cache repo"))?
+        git2::Repository::open_bare(&path).with_context(|| format_err!("opening cache repo"))?
     };
 
     if !specifier.find_in(&repo)? {

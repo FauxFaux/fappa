@@ -1,17 +1,17 @@
 use conch_parser::ast::DefaultWord;
 use conch_parser::ast::SimpleWord;
-use failure::bail;
-use failure::ensure;
-use failure::err_msg;
-use failure::format_err;
-use failure::Error;
-use failure::ResultExt;
+use anyhow::bail;
+use anyhow::ensure;
+use anyhow::anyhow;
+use anyhow::format_err;
+use anyhow::Error;
+use anyhow::Context;
 
 pub fn load(from: &str) -> Result<Vec<Vec<String>>, Error> {
     split(from)
         .into_iter()
         .map(
-            |block| Ok(tokens(&block).with_context(|_| format_err!("parsing block: {:?}", block))?),
+            |block| Ok(tokens(&block).with_context(|| format_err!("parsing block: {:?}", block))?),
         )
         .collect()
 }
@@ -44,7 +44,7 @@ fn tokens(from: &str) -> Result<Vec<String>, Error> {
 
     let mut cmds = DefaultParser::new(Lexer::new(from.chars())).into_iter();
 
-    let cmd: TopLevelCommand<_> = cmds.next().ok_or_else(|| err_msg("no command"))??;
+    let cmd: TopLevelCommand<_> = cmds.next().ok_or_else(|| anyhow!("no command"))??;
 
     ensure!(cmds.next().is_none(), "multiple commands in one block");
 

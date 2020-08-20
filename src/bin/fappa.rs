@@ -1,6 +1,6 @@
-use failure::err_msg;
-use failure::Error;
-use failure::ResultExt;
+use anyhow::anyhow;
+use anyhow::Error;
+use anyhow::Context;
 use log::info;
 
 use fappa::build;
@@ -13,7 +13,7 @@ use fappa::RELEASES;
 fn main() -> Result<(), Error> {
     pretty_env_logger::init_timed();
     let dirs = directories::ProjectDirs::from("xxx", "fau", "fappa")
-        .ok_or_else(|| err_msg("no project dirs"))?;
+        .ok_or_else(|| anyhow!("no project dirs"))?;
 
     use clap::Arg;
     use clap::SubCommand;
@@ -58,11 +58,11 @@ fn main() -> Result<(), Error> {
 
             info!("unpacking...");
             let child = namespace::unpack_to_temp(dirs.cache_dir(), "disco")
-                .with_context(|_| err_msg("opening distro container"))?;
+                .with_context(|| anyhow!("opening distro container"))?;
             info!("unpacked!");
 
             let mut child =
-                namespace::launch_our_init(&child).with_context(|_| err_msg("launching init"))?;
+                namespace::launch_our_init(&child).with_context(|| anyhow!("launching init"))?;
 
             namespace::child::await_ready(&mut child)?;
             namespace::child::execute(&mut child, root, cmd)?;

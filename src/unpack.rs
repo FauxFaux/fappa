@@ -2,8 +2,8 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-use failure::ensure;
-use failure::Error;
+use anyhow::ensure;
+use anyhow::Error;
 
 pub fn unpack<S: AsRef<Path>, D: AsRef<Path>>(src: S, dest: D) -> Result<(), Error> {
     let dest = dest.as_ref();

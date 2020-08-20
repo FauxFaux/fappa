@@ -6,13 +6,13 @@ authors = ["Chris West (Faux) <git@goeswhere.com>"]
 edition = "2018"
 
 [dependencies]
+anyhow = "1"
 cast = "0.2"
 clap = "2.33"
 conch-parser = "0.1"
 directories = "3.0"
 download-if-newer = { path = "../download-if-newer" }
 enum-primitive-derive = "0.2"
-failure = "0.1"
 flate2 = "1"
 fs_extra = "1"
 httpdate = "0.3"

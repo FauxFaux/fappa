@@ -5,19 +5,19 @@ use std::io;
 use std::io::BufRead;
 use std::process;
 
-use failure::ensure;
-use failure::err_msg;
-use failure::format_err;
-use failure::Error;
-use failure::ResultExt;
+use anyhow::ensure;
+use anyhow::anyhow;
+use anyhow::format_err;
+use anyhow::Error;
+use anyhow::Context;
 use nix::unistd::getegid;
 use nix::unistd::geteuid;
 use nix::unistd::Pid;
 
 pub fn map_us(first_fork: Pid) -> Result<(), Error> {
     let us = unsafe { bad_get_login() }?;
-    map(first_fork, &us, geteuid(), "uid").with_context(|_| err_msg("mapping uid"))?;
-    map(first_fork, &us, getegid(), "gid").with_context(|_| err_msg("mapping gid"))?;
+    map(first_fork, &us, geteuid(), "uid").with_context(|| anyhow!("mapping uid"))?;
+    map(first_fork, &us, getegid(), "gid").with_context(|| anyhow!("mapping gid"))?;
     Ok(())
 }
 
@@ -32,7 +32,7 @@ pub fn map_us(first_fork: Pid) -> Result<(), Error> {
 pub fn map<D: Display>(first_fork: Pid, us: &str, id: D, style: &'static str) -> Result<(), Error> {
     let file = format!("/etc/sub{}", style);
     let (start, len) = load_first_sub_id_entry(&us, &file)
-        .with_context(|_| format_err!("loading {:?} from {:?}", us, file))?
+        .with_context(|| format_err!("loading {:?} from {:?}", us, file))?
         .ok_or(format_err!("no sub{} entry for {:?}", style, us))?;
 
     ensure!(len == 65536, "too few {}s: {}", style, len);
@@ -49,7 +49,7 @@ pub fn map<D: Display>(first_fork: Pid, us: &str, id: D, style: &'static str) ->
             "1", &start, "65535", // and `1` to `max-id` (assumed) maps to our sub range
         ])
         .status()
-        .with_context(|_| format_err!("running new{}map (uidmap package)", style))?;
+        .with_context(|| format_err!("running new{}map (uidmap package)", style))?;
 
     ensure!(
         exit_status.success(),
@@ -69,14 +69,14 @@ fn load_first_sub_id_entry(id: &str, file: &str) -> Result<Option<(u64, u64)>, E
             continue;
         }
         let mut parts = line.split(':');
-        let name_or_id = parts.next().ok_or(err_msg("invalid line: no name"))?;
+        let name_or_id = parts.next().ok_or(anyhow!("invalid line: no name"))?;
         if name_or_id == id {
             let start = parts
                 .next()
-                .ok_or(err_msg("invalid line: no first number"))?;
+                .ok_or(anyhow!("invalid line: no first number"))?;
             let end = parts
                 .next()
-                .ok_or(err_msg("invalid line: no second number"))?;
+                .ok_or(anyhow!("invalid line: no second number"))?;
             return Ok(Some((start.parse()?, end.parse()?)));
         }
     }

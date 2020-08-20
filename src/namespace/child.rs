@@ -6,12 +6,12 @@ use std::marker::PhantomData;
 use cast::u64;
 use cast::usize;
 use enum_primitive_derive::Primitive;
-use failure::bail;
-use failure::ensure;
-use failure::err_msg;
-use failure::format_err;
-use failure::Error;
-use failure::ResultExt;
+use anyhow::bail;
+use anyhow::ensure;
+use anyhow::anyhow;
+use anyhow::format_err;
+use anyhow::Error;
+use anyhow::Context;
 use log::info;
 
 #[derive(Primitive, Copy, Clone, Debug, PartialEq, Eq)]
@@ -68,7 +68,7 @@ impl Child {
                 Ok(Some(FromChild::Debug(String::from_utf8(data)?)))
             }
             CodeFrom::ShutdownSuccess => Ok(None),
-            CodeFrom::ShutdownError => Err(err_msg(String::from_utf8(data)?)),
+            CodeFrom::ShutdownError => Err(anyhow!(String::from_utf8(data)?)),
             CodeFrom::Ready => Ok(Some(FromChild::Ready)),
             CodeFrom::Output => Ok(Some(FromChild::Output(data))),
             CodeFrom::SubExited => Ok(Some(FromChild::SubExited(data[0]))),
@@ -81,14 +81,14 @@ impl<S: num_traits::ToPrimitive, R: num_traits::FromPrimitive> Proto<S, R> {
         let mut buf = [0u8; 16];
         self.recv
             .read_exact(&mut buf)
-            .with_context(|_| err_msg("reading header from child"))?;
+            .with_context(|| anyhow!("reading header from child"))?;
         let len = u64::from_le_bytes(buf[..8].try_into().expect("fixed slice"));
         let code = u64::from_le_bytes(buf[8..].try_into().expect("fixed slice"));
         let code = R::from_u64(code).ok_or_else(|| format_err!("invalid command: {}", code))?;
         let mut buf = vec![0u8; usize(len - 16)];
         self.recv
             .read_exact(&mut buf)
-            .with_context(|_| format_err!("reading {}-16 bytes from child", len))?;
+            .with_context(|| format_err!("reading {}-16 bytes from child", len))?;
         Ok((code, buf))
     }
 
@@ -108,7 +108,7 @@ impl<S: num_traits::ToPrimitive, R: num_traits::FromPrimitive> Proto<S, R> {
     pub fn init_await_map_command(&mut self) -> Result<(), Error> {
         let mut buf = [0u8; 4];
         self.recv.read_exact(&mut buf)?;
-        ensure!(&buf == b"map?");
+        ensure!(&buf == b"map?", "map command received");
         Ok(())
     }
 
@@ -119,7 +119,7 @@ impl<S: num_traits::ToPrimitive, R: num_traits::FromPrimitive> Proto<S, R> {
         send.write_all(b"map?")?;
         let mut buf = [0u8; 4];
         recv.read_exact(&mut buf)?;
-        ensure!(&buf == b"map!");
+        ensure!(&buf == b"map!", "map command received");
         Ok(())
     }
 

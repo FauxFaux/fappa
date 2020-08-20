@@ -6,11 +6,11 @@ use std::os::unix::io::AsRawFd;
 use std::path::Path;
 use std::process;
 
-use failure::ensure;
-use failure::err_msg;
-use failure::format_err;
-use failure::Error;
-use failure::ResultExt;
+use anyhow::ensure;
+use anyhow::anyhow;
+use anyhow::format_err;
+use anyhow::Error;
+use anyhow::Context;
 use log::error;
 use log::info;
 use void::ResultVoidErrExt;
@@ -24,7 +24,7 @@ pub fn unpack_to_temp<P: AsRef<Path>>(cache: P, distro: &str) -> Result<tempfile
 
     let temp = tempfile::TempDir::new()?;
     crate::unpack::unpack(&root, &temp)
-        .with_context(|_| format_err!("unpacking {:?} to {:?}", root, temp))?;
+        .with_context(|| format_err!("unpacking {:?} to {:?}", root, temp))?;
 
     Ok(temp)
 }
@@ -38,7 +38,7 @@ pub fn launch_our_init<P: AsRef<Path>>(root: P) -> Result<child::Child, Error> {
         finit_host.push("bin");
         finit_host.push("finit");
         reflink::reflink_or_copy("target/x86_64-unknown-linux-musl/debug/finit", &finit_host)
-            .with_context(|_| err_msg("copying init from host to child"))?;
+            .with_context(|| anyhow!("copying init from host to child"))?;
         fs::set_permissions(&finit_host, fs::Permissions::from_mode(0o755))?;
         info!("finit written to {:?}", finit_host);
 
@@ -106,7 +106,7 @@ fn setup_namespace<P: AsRef<Path>>(
                 | CloneFlags::CLONE_NEWUSER
                 | CloneFlags::CLONE_NEWUTS,
         )
-        .with_context(|_| err_msg("unshare"))?;
+        .with_context(|| anyhow!("unshare"))?;
     }
 
     {
@@ -120,7 +120,7 @@ fn setup_namespace<P: AsRef<Path>>(
             MsFlags::MS_REC | MsFlags::MS_PRIVATE,
             unset,
         )
-        .with_context(|_| err_msg("mount --make-rprivate"))?;
+        .with_context(|| anyhow!("mount --make-rprivate"))?;
 
         // mount our unpacked root on itself, inside the new namespace
         mount(
@@ -130,7 +130,7 @@ fn setup_namespace<P: AsRef<Path>>(
             MsFlags::MS_BIND | MsFlags::MS_NOSUID,
             unset,
         )
-        .with_context(|_| err_msg("mount $root $root"))?;
+        .with_context(|| anyhow!("mount $root $root"))?;
 
         env::set_current_dir(&root)?;
 
@@ -145,7 +145,7 @@ fn setup_namespace<P: AsRef<Path>>(
             MsFlags::MS_BIND | MsFlags::MS_REC,
             unset,
         )
-        .with_context(|_| err_msg("mount --bind /proc .host-proc"))?;
+        .with_context(|| anyhow!("mount --bind /proc .host-proc"))?;
 
         mount(
             Some("/sys"),
@@ -154,7 +154,7 @@ fn setup_namespace<P: AsRef<Path>>(
             MsFlags::MS_BIND | MsFlags::MS_REC,
             unset,
         )
-        .with_context(|_| err_msg("mount --bind /sys sys"))?;
+        .with_context(|| anyhow!("mount --bind /sys sys"))?;
 
         drop(fs::File::create("dev/null")?);
         mount(
@@ -164,23 +164,23 @@ fn setup_namespace<P: AsRef<Path>>(
             MsFlags::MS_BIND,
             unset,
         )
-        .with_context(|_| err_msg("mount --bind /dev/null"))?;
+        .with_context(|| anyhow!("mount --bind /dev/null"))?;
     }
 
     child::Proto::<u64, u64>::await_maps(&mut send, &mut recv)?;
 
     setresuid(Uid::from_raw(0), Uid::from_raw(0), Uid::from_raw(0))
-        .with_context(|_| err_msg("setuid"))?;
+        .with_context(|| anyhow!("setuid"))?;
     setresgid(Gid::from_raw(0), Gid::from_raw(0), Gid::from_raw(0))
-        .with_context(|_| err_msg("setgid"))?;
+        .with_context(|| anyhow!("setgid"))?;
 
-    setgroups(&[Gid::from_raw(0)]).with_context(|_| err_msg("setgroups(0)"))?;
+    setgroups(&[Gid::from_raw(0)]).with_context(|| anyhow!("setgroups(0)"))?;
 
     make_mount_destination("old")?;
-    pivot_root(&Some("."), &Some("old")).with_context(|_| err_msg("pivot_root"))?;
+    pivot_root(&Some("."), &Some("old")).with_context(|| anyhow!("pivot_root"))?;
     nix::mount::umount2("old", nix::mount::MntFlags::MNT_DETACH)
-        .with_context(|_| err_msg("unmount old"))?;
-    fs::remove_dir("old").with_context(|_| err_msg("rm old"))?;
+        .with_context(|| anyhow!("unmount old"))?;
+    fs::remove_dir("old").with_context(|| anyhow!("rm old"))?;
 
     match fork()? {
         ForkResult::Parent { child: _ } => {
@@ -216,18 +216,18 @@ fn setup_pid_1(recv: os_pipe::PipeReader, send: os_pipe::PipeWriter) -> Result<v
     );
 
     assert!(fs::metadata("/bin")
-        .with_context(|_| err_msg("confirming /bin is in place"))?
+        .with_context(|| anyhow!("confirming /bin is in place"))?
         .is_dir());
     assert!(fs::metadata("/bin/finit")
-        .with_context(|_| err_msg("confirming our init is in place"))?
+        .with_context(|| anyhow!("confirming our init is in place"))?
         .is_file());
 
     {
         let sticky_for_all = fs::Permissions::from_mode(0o1777);
         fs::set_permissions("/tmp", sticky_for_all.clone())
-            .with_context(|_| err_msg("permissions for /tmp"))?;
+            .with_context(|| anyhow!("permissions for /tmp"))?;
         fs::set_permissions("/var/tmp", sticky_for_all)
-            .with_context(|_| err_msg("permissions for /var/tmp"))?;
+            .with_context(|| anyhow!("permissions for /var/tmp"))?;
         // TODO: dev/shm?
     }
 
@@ -242,12 +242,12 @@ fn setup_pid_1(recv: os_pipe::PipeReader, send: os_pipe::PipeWriter) -> Result<v
             MsFlags::MS_NOSUID,
             unset,
         )
-        .with_context(|_| err_msg("mount proc -t proc /proc"))?;
+        .with_context(|| anyhow!("mount proc -t proc /proc"))?;
 
         umount2(".host-proc", MntFlags::MNT_DETACH)
-            .with_context(|_| err_msg("unmount .host-proc"))?;
+            .with_context(|| anyhow!("unmount .host-proc"))?;
 
-        fs::remove_dir(".host-proc").with_context(|_| err_msg("dropping host-proc"))?;
+        fs::remove_dir(".host-proc").with_context(|| anyhow!("dropping host-proc"))?;
 
         mount(
             Some("/"),
@@ -256,11 +256,11 @@ fn setup_pid_1(recv: os_pipe::PipeReader, send: os_pipe::PipeWriter) -> Result<v
             MsFlags::MS_BIND | MsFlags::MS_NOSUID | MsFlags::MS_REMOUNT,
             unset,
         )
-        .with_context(|_| err_msg("finalising /"))?;
+        .with_context(|| anyhow!("finalising /"))?;
     }
 
-    let recv = dup(recv.as_raw_fd()).with_context(|_| err_msg("copying recv handle"))?;
-    let send = dup(send.as_raw_fd()).with_context(|_| err_msg("copying send"))?;
+    let recv = dup(recv.as_raw_fd()).with_context(|| anyhow!("copying recv handle"))?;
+    let send = dup(send.as_raw_fd()).with_context(|| anyhow!("copying send"))?;
 
     let proc = CString::new("/bin/finit")?;
     let argv0 = proc.clone();
@@ -268,14 +268,14 @@ fn setup_pid_1(recv: os_pipe::PipeReader, send: os_pipe::PipeWriter) -> Result<v
     let send = CString::new(format!("{}", send))?;
 
     void::unreachable(
-        execv(&proc, &[&argv0, &recv, &send]).with_context(|_| err_msg("exec finit"))?,
+        execv(&proc, &[&argv0, &recv, &send]).with_context(|| anyhow!("exec finit"))?,
     );
 }
 
 fn make_mount_destination(name: &'static str) -> Result<(), Error> {
     let _ = fs::remove_dir(name);
     fs::create_dir(name)
-        .with_context(|_| format_err!("creating {} before mounting on it", name))?;
+        .with_context(|| format_err!("creating {} before mounting on it", name))?;
     fs::set_permissions(name, fs::Permissions::from_mode(0o644))?;
     Ok(())
 }

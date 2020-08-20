@@ -5,8 +5,8 @@ use std::fs;
 use std::os::unix::fs::DirBuilderExt;
 use std::path;
 
-use failure::bail;
-use failure::Error;
+use anyhow::bail;
+use anyhow::Error;
 use nix::sys::stat;
 
 fn main() -> Result<(), Error> {

@@ -1,10 +1,10 @@
 use std::fs;
 use std::path::Path;
 
-use failure::bail;
-use failure::ensure;
-use failure::Error;
-use failure::ResultExt;
+use anyhow::bail;
+use anyhow::ensure;
+use anyhow::Error;
+use anyhow::Context;
 use walkdir;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -110,13 +110,13 @@ pub fn load_from<P: AsRef<Path>>(dir: P) -> Result<Vec<Package>, Error> {
         }
 
         let text =
-            fs::read(entry.path()).with_context(|_| format!("opening {:?}", entry.path()))?;
+            fs::read(entry.path()).with_context(|| format!("opening {:?}", entry.path()))?;
         let text = String::from_utf8(text)?;
         let commands = blocks(&text)
             .into_iter()
             .map(parse_command)
             .collect::<Result<Vec<_>, Error>>()
-            .with_context(|_| format!("parsing an entry in {:?}", entry.path()))?;
+            .with_context(|| format!("parsing an entry in {:?}", entry.path()))?;
 
         ret.push(Package {
             ser: PackageSerialisation { commands },
